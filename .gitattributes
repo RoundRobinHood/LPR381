@@ -1,0 +1,43 @@
+# Default to automatic text handling
+* text=auto
+
+# C# and F# code — normalize to LF for cross-platform dev, but keep diffs
+*.cs   text diff=csharp eol=lf
+*.fs   text diff=fsharp eol=lf
+*.fsi  text diff=fsharp eol=lf
+*.fsx  text diff=fsharp eol=lf
+
+# XAML files (Avalonia UI)
+*.xaml  text eol=lf
+*.axaml text eol=lf
+
+# Project/solution files — keep CRLF so Visual Studio on Windows is happy
+*.sln     text eol=crlf
+*.csproj  text eol=crlf
+*.fsproj  text eol=crlf
+
+# Config files
+*.props   text eol=lf
+*.targets text eol=lf
+*.config  text eol=lf
+*.json    text eol=lf
+*.yaml    text eol=lf
+*.yml     text eol=lf
+*.toml    text eol=lf
+
+# Images & binaries
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.gif binary
+*.zip binary
+*.dll binary
+*.exe binary
+
+# Fonts
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+
