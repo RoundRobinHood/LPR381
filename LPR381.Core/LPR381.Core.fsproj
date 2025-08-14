@@ -8,7 +8,11 @@
   <ItemGroup>
     <Compile Include="Library.fs" />
     <Compile Include="Formulation.fs" />
+    <Compile Include="PrimalSimplex.fs" />
+    <None Include="test_simplex.fsx" />
   </ItemGroup>
+
+  <ItemGroup />
 
   <ItemGroup>
     <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
