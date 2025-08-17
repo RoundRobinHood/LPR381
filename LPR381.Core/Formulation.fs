@@ -175,3 +175,8 @@ type LPFormulation(
         | _ -> ()
 
       LPCanonical(this.ObjectiveType, objective, constraintMat, rhs, variableNames, varIntRestrictions)
+
+type ITree<'T> =
+  abstract member Item: 'T
+  abstract member Children: ITree<'T>[]
+
