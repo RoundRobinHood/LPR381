@@ -8,9 +8,5 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-
-        int result = Logic.add(3, 4);
-
-        this.Title = $"3 + 4 = {result}";
     }
 }
