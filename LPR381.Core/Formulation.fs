@@ -1,5 +1,6 @@
 namespace LPR381.Core
 
+open System.Collections.Generic
 open MathNet.Numerics.LinearAlgebra
 
 type ObjectiveType =
@@ -175,3 +176,32 @@ type LPFormulation(
         | _ -> ()
 
       LPCanonical(this.ObjectiveType, objective, constraintMat, rhs, variableNames, varIntRestrictions)
+
+    member this.fromLPCanonical(var_dict: Dictionary<string, double>)=
+      let ret = Dictionary<string, double>()
+
+      for i in [ 0 .. this.VarNames.Length - 1 ] do
+        let varName = this.VarNames.[i]
+        match this.VarSignRestrictions.[i] with
+        | SignRestriction.Positive ->
+          ret.[varName] <- var_dict.[varName]
+        | SignRestriction.Negative ->
+          ret.[varName] <- -var_dict.[sprintf "%s-" varName]
+        | SignRestriction.Unrestricted ->
+          ret.[varName] <- var_dict.[sprintf "%s+" varName] - var_dict.[sprintf "%s-" varName]
+        | _ -> ()
+
+      ret
+      
+
+type ITree<'T> =
+  abstract member Item: 'T
+  abstract member Children: ITree<'T>[]
+
+type SimplexResult =
+  | Optimal of Dictionary<string, double> * double
+  | Unbounded of string
+  | Infeasible of int
+
+type ISimplexResultProvider =
+  abstract member SimplexResult: Option<SimplexResult>
