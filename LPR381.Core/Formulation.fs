@@ -1,5 +1,6 @@
 namespace LPR381.Core
 
+open System.Collections.Generic
 open MathNet.Numerics.LinearAlgebra
 
 type ObjectiveType =
@@ -180,3 +181,7 @@ type ITree<'T> =
   abstract member Item: 'T
   abstract member Children: ITree<'T>[]
 
+type SimplexResult =
+  | Optimal of Dictionary<string, double> * double
+  | Unbounded of string
+  | Infeasible of int

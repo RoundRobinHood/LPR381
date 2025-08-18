@@ -3,11 +3,6 @@ namespace LPR381.Core
 open System.Collections.Generic
 open MathNet.Numerics.LinearAlgebra
 
-type SimplexResult =
-  | Optimal of Dictionary<string, double> * double
-  | Unbounded of string
-  | Infeasible of int
-
 type EtaMatrix(col: int, d: Vector<double>) =
   let lazyMatrix = lazy (
     let n = d.Count
@@ -25,7 +20,7 @@ type EtaMatrix(col: int, d: Vector<double>) =
   member this.apply(bInverse: Matrix<double>) =
     this.matrix * bInverse
 
-type TableauState =
+type RevisedTableauState =
   | Pivot of int * int * EtaMatrix
   | ResultState of SimplexResult
 
@@ -34,7 +29,7 @@ type RevisedSimplexNode=
     canon: LPCanonical
     basis: array<int>
     bInverse: Matrix<double>
-    state: TableauState
+    state: RevisedTableauState
   }
 
 type RevisedPrimalSimplex(item: RevisedSimplexNode)=
