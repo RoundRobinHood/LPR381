@@ -4,6 +4,7 @@
 
 #load "Formulation.fs"
 #load "PrimalSimplex.fs"
+#load "Explorer.fs"
 
 open System
 open System.Collections.Generic
@@ -40,8 +41,8 @@ let checkSolution
         failwithf "Test '%s' reported Infeasible (unexpected)" name
 
 let solve (lp: LPFormulation) =
-    let canon = lp.ToLPCanonical()
-    Simplex.SolvePrimal canon
+    let tree = PrimalSimplex lp
+    Explorer.SolveSimplex tree
 
 let tol = 1e-6
 

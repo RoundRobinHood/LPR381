@@ -3,29 +3,37 @@
 open System.Collections.Generic
 open MathNet.Numerics.LinearAlgebra
 
-type Tableau =
-  {
-    ColumnNames: string[]
-    RowNames: string[]
-    Values: Matrix<double>
+type Tableau = 
+  internal {
+    columnNames: string[]
+    rowNames: string[]
+    values: Matrix<double>
   }
+  member this.ColumnNames= this.columnNames
+  member this.RowNames= this.rowNames
+  member this.Values= this.values.ToArray()
 
 type TableauState =
-  | Pivot of int * int
-  | ResultState of SimplexResult
+  | Pivot of row:int * col:int
+  | ResultState of result:SimplexResult
 
 type SimplexNode =
   {
-    tableau: Tableau
-    state: TableauState
+    Tableau: Tableau
+    State: TableauState
   }
+  interface ISimplexResultProvider with
+    member this.SimplexResult =
+      match this.State with
+      | ResultState s -> Some s
+      | _ -> None
 
-type PrimalSimplex(item: SimplexNode, objectiveType: ObjectiveType) =
-  static let node(tableau: Tableau, objectiveType: ObjectiveType) =
+type PrimalSimplex(item: SimplexNode, objectiveType: ObjectiveType, formulation: LPFormulation) =
+  static let node(tableau: Tableau, objectiveType: ObjectiveType, formulation: LPFormulation) =
     // Choose entering variable
     let mutable enteringVariable = -1
     let mutable bestReducedCost = 0.0
-    for i in [ 0 .. tableau.Values.ColumnCount - 1 ] do
+    for i in [ 0 .. tableau.values.ColumnCount - 1 ] do
       let reducedCost = tableau.Values.[0, i]
       match objectiveType with
       | ObjectiveType.Max ->
@@ -42,9 +50,9 @@ type PrimalSimplex(item: SimplexNode, objectiveType: ObjectiveType) =
       let var_dict = Dictionary<string, double>()
       // NOTE: if multiple variables share a basis row, the first is taken as basic and the rest as 0
       let rows_grabbed = HashSet<int>()
-      for i in [ 0 .. tableau.Values.ColumnCount - 2 ] do
+      for i in [ 0 .. tableau.values.ColumnCount - 2 ] do
         let rec isUnitColumn oneRow j =
-          if j >= tableau.Values.RowCount then
+          if j >= tableau.values.RowCount then
             oneRow
           else
             let value = tableau.Values.[j, i]
@@ -63,51 +71,50 @@ type PrimalSimplex(item: SimplexNode, objectiveType: ObjectiveType) =
           var_dict.[tableau.ColumnNames.[i]] <- 0
         else
           rows_grabbed.Add oneRow |> ignore
-          var_dict.[tableau.ColumnNames.[i]] <- tableau.Values.[oneRow, tableau.Values.ColumnCount - 1]
+          var_dict.[tableau.ColumnNames.[i]] <- tableau.Values.[oneRow, tableau.values.ColumnCount - 1]
       {
-        tableau= tableau
-        state= ResultState (Optimal (var_dict, tableau.Values.[0, tableau.Values.ColumnCount - 1]))
+        Tableau= tableau
+        State= ResultState (Optimal (formulation.fromLPCanonical var_dict, tableau.Values.[0, tableau.values.ColumnCount - 1]))
       }
     else
       // Choose leaving variable
       let mutable minRatio = infinity
       let mutable leavingBasisIndex = -1
 
-      for i in [ 1 .. tableau.Values.RowCount - 1 ] do
+      for i in [ 1 .. tableau.values.RowCount - 1 ] do
         if tableau.Values.[i, enteringVariable] > 0.0 then
-          let ratio = tableau.Values.[i, tableau.Values.ColumnCount - 1] / tableau.Values.[i, enteringVariable]
+          let ratio = tableau.Values.[i, tableau.values.ColumnCount - 1] / tableau.Values.[i, enteringVariable]
           if ratio < minRatio then
             minRatio <- ratio
             leavingBasisIndex <- i
 
       if leavingBasisIndex = -1 then
         {
-          tableau= tableau
-          state= ResultState (Unbounded tableau.ColumnNames.[enteringVariable])
+          Tableau= tableau
+          State= ResultState (Unbounded tableau.ColumnNames.[enteringVariable])
         }
       else
         {
-          tableau= tableau
-          state= Pivot (leavingBasisIndex, enteringVariable)
+          Tableau= tableau
+          State= Pivot (leavingBasisIndex, enteringVariable)
         }
 
   let children =
     lazy (
-      match item.state with
+      match item.State with
       | ResultState _ -> [||]
       | Pivot (r, c) ->
-        let newValues = item.tableau.Values.Clone()
+        let newValues = item.Tableau.values.Clone()
         newValues.SetRow(r, newValues.Row r / newValues.[r, c])
         for j in [ 0 .. newValues.RowCount - 1 ] do
           if j <> r then
             newValues.SetRow(j, newValues.Row j - newValues.Row r * newValues.[j, c])
 
-        [| PrimalSimplex (node ({
-            item.tableau with Values = newValues
-          }, objectiveType), objectiveType) :> ITree<SimplexNode> |]
+        [| PrimalSimplex (node ({ item.Tableau with values = newValues }, objectiveType, formulation), objectiveType, formulation) :> ITree<SimplexNode> |]
     )
 
-  new(canon: LPCanonical)=
+  new(formulation: LPFormulation)=
+    let canon = formulation.ToLPCanonical()
     let values = Matrix<double>.Build.Dense(canon.ConstraintMatrix.RowCount + 1, canon.ConstraintMatrix.ColumnCount + 1)
     let objective = values.Row 0
     objective.SetSubVector(0, canon.Objective.Count, -canon.Objective)
@@ -119,21 +126,11 @@ type PrimalSimplex(item: SimplexNode, objectiveType: ObjectiveType) =
     values.SetSubMatrix(1, 0, canon.ConstraintMatrix)
 
     PrimalSimplex(node ({
-      ColumnNames= Array.append canon.VariableNames [| "RHS" |]
-      RowNames= Array.init canon.ConstraintMatrix.RowCount (fun i -> sprintf "c%d" i)
-      Values = values
-    }, canon.ObjectiveType), canon.ObjectiveType)
+      columnNames= Array.append canon.VariableNames [| "RHS" |]
+      rowNames= Array.init canon.ConstraintMatrix.RowCount (fun i -> sprintf "c%d" i)
+      values = values
+    }, canon.ObjectiveType, formulation), canon.ObjectiveType, formulation)
 
   interface ITree<SimplexNode> with
     member _.Item = item
     member _.Children = children.Value
-
-module Simplex =
-  let SolvePrimal(canon: LPCanonical)=
-    let root = PrimalSimplex canon :> ITree<SimplexNode>
-    let rec solve (node: ITree<SimplexNode>) =
-      match node.Item.state with
-      | ResultState s -> s
-      | Pivot _ -> solve node.Children.[0]
-
-    solve root
