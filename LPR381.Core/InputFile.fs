@@ -2,7 +2,6 @@ namespace LPR381.Core
 
 open System
 open System.IO
-open System.Globalization
 
 module InputFile =
   let TryInterpretLines (input: string[]) (result: byref<LPFormulation>) (error: byref<string>)=
@@ -66,3 +65,15 @@ module InputFile =
     with ex ->
       error <- ex.Message
       false
+  
+  let TryInterpretText (text: string) (result: byref<LPFormulation>) (error: byref<string>) =
+    let lines =
+      text.Split(
+        [|"\r\n"; "\n"|], 
+        StringSplitOptions.None
+      )
+    TryInterpretLines lines &result &error
+
+  let TryInterpretFile (path: string) (result: byref<LPFormulation>) (error: byref<string>) =
+    let lines = File.ReadAllLines path
+    TryInterpretLines lines &result &error
