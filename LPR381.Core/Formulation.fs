@@ -325,3 +325,19 @@ type LPFormulation(
       signRestrictions,
       intRestrictions
     )
+
+  new(objective: LPObjective, constraints: LPConstraint[])=
+    let varCount =
+      objective.LinearSum
+      |> Array.append (constraints |> Array.collect (fun x -> x.LeftSide))
+      |> Array.distinctBy (fun x -> x |> snd)  |> Array.length
+
+    let signRestrictions = Array.init varCount (fun _ -> SignRestriction.Positive)
+    let intRestrictions = Array.init varCount (fun _ -> IntRestriction.Unrestricted)
+
+    LPFormulation(
+      objective,
+      constraints,
+      signRestrictions,
+      intRestrictions
+    )
