@@ -24,12 +24,13 @@ type IntRestriction =
   | Binary = 1
   | Unrestricted = 2
 
-module Parsing=
+module Parsing =
   let linearSum (input: string): (double * string) array =
     let skipWhitespace (i: int) =
-      if i >= input.Length then i else i + (input.[i..] |> Seq.takeWhile Char.IsWhiteSpace |> Seq.length)
+      if i >= input.Length then i
+      else i + (input.[i..] |> Seq.takeWhile Char.IsWhiteSpace |> Seq.length)
 
-    let rec parseTerms (i: int) = 
+    let rec parseTerms (i: int) =
       let i = skipWhitespace i
       if i >= input.Length then [] else
 
@@ -37,32 +38,31 @@ module Parsing=
         failwithf "Invalid character: '%c'" input.[i]
 
       let sign = if input.[i] = '-' then -1.0 else 1.0
-      let operator = if input.[i] = '-' || input.[i] = '+' then i else -1
-      let i = if input.[i] = '+' || input.[i] = '-' then i + 1 else i
-      if i >= input.Length then 
-        if input.[i-1] = '+' || input.[i-1] = '-' then failwith "Missing variable name" 
-        else [] 
+      let hadOperator = input.[i] = '-' || input.[i] = '+'
+      let i = if hadOperator then i + 1 else i
+
+      if i >= input.Length then
+        if hadOperator then failwith "Missing variable name" else []
       else
-
-      let i = skipWhitespace i
-      if i >= input.Length then if operator <> -1 then failwithf "Missing term after '%c'" input.[operator] else [] 
-      else
-
-      let coefficientStr = input.[i..] |> Seq.takeWhile (fun c -> Char.IsDigit c || c = '.' || c = '-') |> Seq.toArray |> String
-
-      let coefficient = if coefficientStr.Length = 0 then sign else sign * Double.Parse(coefficientStr, CultureInfo.InvariantCulture)
-
-      let i = skipWhitespace (i + coefficientStr.Length)
-      if i >= input.Length then failwith "Missing variable name"
-
-      let variableName = input.[i..] |> Seq.takeWhile (fun c -> Char.IsLetterOrDigit c || c = '_') |> Seq.toArray |> String
-      if variableName.Length = 0 then failwith "Missing variable name"
-
-      (coefficient, variableName) :: parseTerms (i + variableName.Length)
+        let i = skipWhitespace i
+        if i >= input.Length then
+          if hadOperator then failwithf "Missing term after '%c'" (if sign < 0.0 then '-' else '+') else []
+        else
+          let coefficientStr =
+            input.[i..] |> Seq.takeWhile (fun c -> Char.IsDigit c || c = '.' || c = '-') |> Seq.toArray |> String
+          let coefficient =
+            if coefficientStr.Length = 0 then sign
+            else sign * Double.Parse(coefficientStr, CultureInfo.InvariantCulture)
+          let i = skipWhitespace (i + coefficientStr.Length)
+          if i >= input.Length then failwith "Missing variable name"
+          let variableName =
+            input.[i..] |> Seq.takeWhile (fun c -> Char.IsLetterOrDigit c || c = '_') |> Seq.toArray |> String
+          if variableName.Length = 0 then failwith "Missing variable name"
+          (coefficient, variableName) :: parseTerms (i + variableName.Length)
 
     parseTerms 0 |> List.toArray
 
-  let tryLinearSum (input: string, result: byref<(double * string) array>, error: byref<string>)=
+  let tryLinearSum (input: string, result: byref<(double * string) array>, error: byref<string>) =
     try
       result <- linearSum input
       error <- ""
@@ -72,8 +72,8 @@ module Parsing=
       error <- ex.Message
       false
 
+  /// Simple Borda count to produce a stable, merged ordering of variable names
   let bordaCount (rankings: string array array) =
-    // Collect the union of all items across all rankings
     let allItems =
       rankings
       |> Seq.collect id
@@ -99,11 +99,11 @@ module Parsing=
 type LPObjective(
   objectiveType: ObjectiveType,
   linearSum: (double * string) array
-)=
+) =
   member val ObjectiveType = objectiveType
   member val LinearSum = linearSum
 
-  static member TryParse(objectiveType: ObjectiveType, input: string, result: byref<LPObjective>, error: byref<string>)=
+  static member TryParse(objectiveType: ObjectiveType, input: string, result: byref<LPObjective>, error: byref<string>) =
     try
       result <- LPObjective(objectiveType, Parsing.linearSum input)
       error <- ""
@@ -117,12 +117,12 @@ type LPConstraint(
   leftSide: (double * string) array,
   constraintSign: ConstraintSign,
   rightSide: double
-)=
+) =
   member val LeftSide = leftSide
   member val ConstraintSign = constraintSign
   member val RightSide = rightSide
 
-  static member TryParse(constraintSign: ConstraintSign, rightSide: double, leftSide: string, result: byref<LPConstraint>, error: byref<string>)=
+  static member TryParse(constraintSign: ConstraintSign, rightSide: double, leftSide: string, result: byref<LPConstraint>, error: byref<string>) =
     try
       result <- LPConstraint(Parsing.linearSum leftSide, constraintSign, rightSide)
       error <- ""
@@ -132,16 +132,15 @@ type LPConstraint(
       error <- ex.Message
       false
 
-  static member TryParse(constraintSign: string, rightSide: double, leftSide: string, result: byref<LPConstraint>, error: byref<string>)=
+  static member TryParse(constraintSign: string, rightSide: double, leftSide: string, result: byref<LPConstraint>, error: byref<string>) =
     match constraintSign with
     | ">=" -> LPConstraint.TryParse(ConstraintSign.GreaterOrEqual, rightSide, leftSide, &result, &error)
     | "<=" -> LPConstraint.TryParse(ConstraintSign.LessOrEqual, rightSide, leftSide, &result, &error)
-    | "=" -> LPConstraint.TryParse(ConstraintSign.Equal, rightSide, leftSide, &result, &error)
+    | "="  -> LPConstraint.TryParse(ConstraintSign.Equal, rightSide, leftSide, &result, &error)
     | s ->
       result <- LPConstraint([||], ConstraintSign.LessOrEqual, rightSide)
       error <- sprintf "Invalid constraint sign: '%s'" s
       false
-
 
 type LPCanonical(
   objectiveType: ObjectiveType,
@@ -177,167 +176,194 @@ type LPFormulation(
   member val VarSignRestrictions = varSignRestrictions
   member val VarIntRestrictions = varIntRestrictions
 
+  /// Build a canonical form with nonnegative variables, slack/surplus/equality rows,
+  /// and (optionally) x <= 1 rows for binary vars.
   member this.ToLPCanonical() =
-    // Step 1: Calculate final matrix size
-    // constraints: '<=/>=' count + 2 * '=' count
-    // variables: 'positive/negative' count + 2 * 'urs' count + '<=/>=' count + 2 * '=' count
-    let constrIneqCount = this.ConstraintSigns |> Array.filter (fun x -> x = ConstraintSign.GreaterOrEqual || x = ConstraintSign.LessOrEqual) |> Array.length
-    let constrEqualCount = this.ConstraintSigns.Length - constrIneqCount
-    let ursCount = this.VarSignRestrictions |> Array.filter (fun x -> x = SignRestriction.Unrestricted) |> Array.length
-    let posNegCount = this.VarSignRestrictions.Length - ursCount
+    // ---- Step 1: Sizes ----
+    let nVarsOriginal = this.VarSignRestrictions.Length
+    let ineqCount =
+      this.ConstraintSigns
+      |> Array.filter (fun x -> x = ConstraintSign.GreaterOrEqual || x = ConstraintSign.LessOrEqual)
+      |> Array.length
+    let eqCount = this.ConstraintSigns.Length - ineqCount
 
-    let constraintCount = constrIneqCount + 2 * constrEqualCount
-    let variableCount = posNegCount + 2 * ursCount + constraintCount
+    let baseRowCount = ineqCount + 2 * eqCount
+    let binaryCount =
+      this.VarIntRestrictions |> Array.filter ((=) IntRestriction.Binary) |> Array.length
+    let totalRowCount = baseRowCount + binaryCount
 
-    let objective = Vector<double>.Build.Dense(variableCount, 0.0)
-    let constraintMat = Matrix<double>.Build.Dense(constraintCount, variableCount, 0.0)
-    let rhs = Vector<double>.Build.Dense(constraintCount, 0.0)
-    let variableNames = Array.create variableCount ""
-    let mutable varIntRestrictions = Array.create (variableCount - this.VarIntRestrictions.Length) IntRestriction.Unrestricted |> Array.append this.VarIntRestrictions
+    // Columns: expanded original vars (URS -> 2 columns), plus one slack/surplus per row
+    let ursCount = this.VarSignRestrictions |> Array.filter ((=) SignRestriction.Unrestricted) |> Array.length
+    let posNegCount = nVarsOriginal - ursCount
+    let expandedVarCols = posNegCount + 2 * ursCount
+    let totalColCount = expandedVarCols + totalRowCount
 
-    // Step 1: Set up variable names & objective row
-    let mutable writeColumn = 0
-    for i in [| 0 .. this.VarSignRestrictions.Length - 1 |] do
+    let objective = Vector<double>.Build.Dense(totalColCount, 0.0)
+    let constraintMat = Matrix<double>.Build.Dense(totalRowCount, totalColCount, 0.0)
+    let rhs = Vector<double>.Build.Dense(totalRowCount, 0.0)
+    let variableNames = Array.create totalColCount ""
+    let varIntRestrictions = Array.create totalColCount IntRestriction.Unrestricted
+
+    // ---- Step 2: Name expanded variables & objective coefficients & integrality map ----
+    let mutable writeCol = 0
+    for i = 0 to nVarsOriginal - 1 do
       match this.VarSignRestrictions.[i] with
       | SignRestriction.Positive ->
-        variableNames.[writeColumn] <- this.VarNames.[i]
-        objective.[writeColumn] <- this.Objective.[i]
+          variableNames.[writeCol] <- this.VarNames.[i]
+          objective.[writeCol] <- this.Objective.[i]
+          varIntRestrictions.[writeCol] <- this.VarIntRestrictions.[i]
+          writeCol <- writeCol + 1
       | SignRestriction.Negative ->
-        variableNames.[writeColumn] <- sprintf "%s-" this.VarNames.[i]
-        objective.[writeColumn] <- -this.Objective.[i]
+          variableNames.[writeCol] <- sprintf "%s-" this.VarNames.[i]
+          objective.[writeCol] <- -this.Objective.[i]
+          // If original is integer/binary, carry it to the single column we created
+          varIntRestrictions.[writeCol] <- this.VarIntRestrictions.[i]
+          writeCol <- writeCol + 1
       | SignRestriction.Unrestricted ->
-        variableNames.[writeColumn] <- sprintf "%s+" this.VarNames.[i]
-        objective.[writeColumn] <- this.Objective.[i]
-        writeColumn <- writeColumn + 1
-        variableNames.[writeColumn] <- sprintf "%s-" this.VarNames.[i]
-        objective.[writeColumn] <- -this.Objective.[i]
+          variableNames.[writeCol] <- sprintf "%s+" this.VarNames.[i]
+          objective.[writeCol] <- this.Objective.[i]
+          varIntRestrictions.[writeCol] <- this.VarIntRestrictions.[i]
+          writeCol <- writeCol + 1
+
+          variableNames.[writeCol] <- sprintf "%s-" this.VarNames.[i]
+          objective.[writeCol] <- -this.Objective.[i]
+          varIntRestrictions.[writeCol] <- this.VarIntRestrictions.[i]
+          writeCol <- writeCol + 1
       | _ -> ()
-      writeColumn <- writeColumn + 1
 
-    for i in [| 0 .. this.ConstraintSigns.Length - 1 |] do
-      match this.ConstraintSigns.[i] with
-      | ConstraintSign.LessOrEqual ->
-        variableNames.[writeColumn] <- sprintf "s%d" (i + 1)
-      | ConstraintSign.Equal ->
-        variableNames.[writeColumn] <- sprintf "s%d" (i + 1)
-        writeColumn <- writeColumn + 1
-        variableNames.[writeColumn] <- sprintf "e%d" (i + 1)
-      | ConstraintSign.GreaterOrEqual ->
-        variableNames.[writeColumn] <- sprintf "e%d" (i + 1)
-      | _ -> ()
-      writeColumn <- writeColumn + 1         
+    // Slack/surplus/equality/binary slack columns start here
+    let mutable slackCol = expandedVarCols
 
-    // Leftover variables are bin constraint ones (s-vars)
-    while writeColumn < variableCount do
-      let constraint_count = writeColumn - (variableCount - constraintCount)
-      variableNames.[writeColumn] <- sprintf "s%d" constraint_count
-      writeColumn <- writeColumn + 1
+    // Preassign names for constraint-related columns (<=: s#, >=: e#, =: s#, e#)
+    // We'll use row indices to make names stable and readable.
+    // Fill during row construction to avoid mismatches.
 
-    // Step 2: Constraints     
-    let getVarCoefficients readIdx =
-      let row = Vector<double>.Build.Dense(variableCount, 0.0)
-      let mutable column = 0
-      for i in [| 0 .. this.ConstraintCoefficients.GetLength 1 - 1 |] do
-        match this.VarSignRestrictions.[i] with
+    // Helper to get expanded row of coefficients for constraint i
+    let getVarCoefficients (rowIdx: int) =
+      let row = Vector<double>.Build.Dense(totalColCount, 0.0)
+      let mutable col = 0
+      for j = 0 to this.ConstraintCoefficients.GetLength(1) - 1 do
+        match this.VarSignRestrictions.[j] with
         | SignRestriction.Positive ->
-          row.[column] <- this.ConstraintCoefficients.[readIdx,i]
+            row.[col] <- this.ConstraintCoefficients.[rowIdx, j]
+            col <- col + 1
         | SignRestriction.Negative ->
-          row.[column] <- -this.ConstraintCoefficients.[readIdx, i]
+            row.[col] <- -this.ConstraintCoefficients.[rowIdx, j]
+            col <- col + 1
         | SignRestriction.Unrestricted ->
-          row.[column] <- this.ConstraintCoefficients.[readIdx, i]
-          column <- column + 1
-          row.[column] <- -this.ConstraintCoefficients.[readIdx, i]
+            row.[col] <- this.ConstraintCoefficients.[rowIdx, j]
+            col <- col + 1
+            row.[col] <- -this.ConstraintCoefficients.[rowIdx, j]
+            col <- col + 1
         | _ -> ()
-        column <- column + 1
       row
 
-    writeColumn <- variableCount - constraintCount
+    // ---- Step 3: Build constraint rows ----
     let mutable writeRow = 0
-    for i in [| 0 .. this.ConstraintSigns.Length - 1 |] do
+    for i = 0 to this.ConstraintSigns.Length - 1 do
       match this.ConstraintSigns.[i] with
       | ConstraintSign.LessOrEqual ->
-        let row = getVarCoefficients i
-        row.[writeColumn] <- 1
-        constraintMat.SetRow(writeRow, row)
-        rhs.[writeRow] <- this.RHS.[i]
+          let row = getVarCoefficients i
+          row.[slackCol] <- 1.0
+          constraintMat.SetRow(writeRow, row)
+          rhs.[writeRow] <- this.RHS.[i]
+          variableNames.[slackCol] <- sprintf "s%d" (i + 1)
+          writeRow <- writeRow + 1
+          slackCol <- slackCol + 1
+
       | ConstraintSign.GreaterOrEqual ->
-        let row = -getVarCoefficients i
-        row.[writeColumn] <- 1
-        constraintMat.SetRow(writeRow, row)
-        rhs.[writeRow] <- -this.RHS.[i]
+          // Multiply by -1 to convert to <=, then add slack
+          let row = - (getVarCoefficients i)
+          row.[slackCol] <- 1.0
+          constraintMat.SetRow(writeRow, row)
+          rhs.[writeRow] <- -this.RHS.[i]
+          // Keep "e#" naming to reflect original >= (excess) semantics
+          variableNames.[slackCol] <- sprintf "e%d" (i + 1)
+          writeRow <- writeRow + 1
+          slackCol <- slackCol + 1
+
       | ConstraintSign.Equal ->
-        let row1 = getVarCoefficients i
-        let row2 = -row1.Clone()
+          // First: <= with s_i
+          let row1 = getVarCoefficients i
+          row1.[slackCol] <- 1.0
+          constraintMat.SetRow(writeRow, row1)
+          rhs.[writeRow] <- this.RHS.[i]
+          variableNames.[slackCol] <- sprintf "s%d" (i + 1)
+          writeRow <- writeRow + 1
+          slackCol <- slackCol + 1
 
-        row1.[writeColumn] <- 1
-        constraintMat.SetRow(writeRow, row1)
-        rhs.[writeRow] <- this.RHS.[i]
+          // Second: >= part -> multiply by -1, add "e_i"
+          let row2 = - (getVarCoefficients i)
+          row2.[slackCol] <- 1.0
+          constraintMat.SetRow(writeRow, row2)
+          rhs.[writeRow] <- -this.RHS.[i]
+          variableNames.[slackCol] <- sprintf "e%d" (i + 1)
+          writeRow <- writeRow + 1
+          slackCol <- slackCol + 1
 
-        writeRow <- writeRow + 1
-        writeColumn <- writeColumn + 1
-
-        row2.[writeColumn] <- 1
-        constraintMat.SetRow(writeRow, row2)
-        rhs.[writeRow] <- -this.RHS.[i]
       | _ -> ()
-      writeColumn <- writeColumn + 1
-      writeRow <- writeRow + 1
 
-      LPCanonical(this.ObjectiveType, objective, constraintMat, rhs, variableNames, varIntRestrictions)
-
-    member this.fromLPCanonical(var_dict: Dictionary<string, double>)=
-      let ret = Dictionary<string, double>()
-
-      for i in [ 0 .. this.VarNames.Length - 1 ] do
-        let varName = this.VarNames.[i]
-        match this.VarSignRestrictions.[i] with
-        | SignRestriction.Positive ->
-          ret.[varName] <- var_dict.[varName]
-        | SignRestriction.Negative ->
-          ret.[varName] <- -var_dict.[sprintf "%s-" varName]
-        | SignRestriction.Unrestricted ->
-          ret.[varName] <- var_dict.[sprintf "%s+" varName] - var_dict.[sprintf "%s-" varName]
-        | _ -> ()
-
-      ret
-      
-
-type ITree<'T> =
-  abstract member Item: 'T
-  abstract member Children: ITree<'T>[]
-
-type SimplexResult =
-  | Optimal of Dictionary<string, double> * double
-  | Unbounded of string
-  | Infeasible of int
-
-type ISimplexResultProvider =
-  abstract member SimplexResult: Option<SimplexResult>
-    // Step 3: Add constraints for binary variables
-    for i in [| 0 .. this.VarIntRestrictions.Length - 1 |] do
-      match this.VarIntRestrictions.[i] with
-      | IntRestriction.Unrestricted | IntRestriction.Integer -> ()
-      | IntRestriction.Binary ->
-        constraintMat.[writeRow, i] <- 1
-        constraintMat.[writeRow, writeColumn] <- 1
-        rhs.[writeRow] <- 1
-        writeRow <- writeRow + 1
-        writeColumn <- writeColumn + 1
-        varIntRestrictions.[i] <- IntRestriction.Integer
-      | _ -> ()
+    // ---- Step 4: For binary vars, add x <= 1 as x + s_b = 1 (since x >= 0 already by sign) ----
+    // This keeps rows canonical with a single +1 slack.
+    if binaryCount > 0 then
+      for i = 0 to nVarsOriginal - 1 do
+        if this.VarIntRestrictions.[i] = IntRestriction.Binary then
+          // Find the canonical column index of this variable (assumes Positive or URS)
+          // Prefer exact "x", then "x+" for URS. (Binary with Negative sign doesn't make sense.)
+          let name = this.VarNames.[i]
+          let varColOpt =
+            variableNames
+            |> Array.tryFindIndex ((=) name)
+            |> Option.orElseWith (fun () -> variableNames |> Array.tryFindIndex ((=) (name + "+")))
+          match varColOpt with
+          | Some varCol ->
+              let row = Vector<double>.Build.Dense(totalColCount, 0.0)
+              row.[varCol] <- 1.0
+              row.[slackCol] <- 1.0
+              constraintMat.SetRow(writeRow, row)
+              rhs.[writeRow] <- 1.0
+              variableNames.[slackCol] <- sprintf "s_b%d" (i + 1)
+              // Keep integrality marker for the variable column as Binary
+              writeRow <- writeRow + 1
+              slackCol <- slackCol + 1
+          | None ->
+              // If not found, we silently skip (covers odd cases); you can raise if you prefer:
+              // failwithf "Binary var '%s' not found among canonical columns." name
+              ()
+      // writeRow should now equal totalRowCount
 
     LPCanonical(this.ObjectiveType, objective, constraintMat, rhs, variableNames, varIntRestrictions)
 
-  new(objective: LPObjective, constraints: LPConstraint[], signRestrictions: SignRestriction[], intRestrictions: IntRestriction[])=
-    let variableNames = 
-      [| objective.LinearSum
-      |> Array.map snd |]
+  /// Map a solution in canonical variables back to original variables
+  member this.fromLPCanonical (var_dict: Dictionary<string, double>) =
+    let ret = Dictionary<string, double>()
+    for i = 0 to this.VarNames.Length - 1 do
+      let varName = this.VarNames.[i]
+      match this.VarSignRestrictions.[i] with
+      | SignRestriction.Positive ->
+          ret.[varName] <- if var_dict.ContainsKey(varName) then var_dict.[varName] else 0.0
+      | SignRestriction.Negative ->
+          let key = sprintf "%s-" varName
+          ret.[varName] <- if var_dict.ContainsKey(key) then -var_dict.[key] else 0.0
+      | SignRestriction.Unrestricted ->
+          let kp = sprintf "%s+" varName
+          let km = sprintf "%s-" varName
+          let vp = if var_dict.ContainsKey(kp) then var_dict.[kp] else 0.0
+          let vm = if var_dict.ContainsKey(km) then var_dict.[km] else 0.0
+          ret.[varName] <- vp - vm
+      | _ -> ()
+    ret
+
+  // ---- Convenience ctors ----
+  new (objective: LPObjective, constraints: LPConstraint[], signRestrictions: SignRestriction[], intRestrictions: IntRestriction[]) =
+    let variableNames =
+      [| objective.LinearSum |> Array.map snd |]
       |> Array.append (constraints |> Array.map (fun x -> x.LeftSide |> Array.map snd))
       |> Parsing.bordaCount
 
-    let lookup (values: (double * string)[]) (item: string)=
-      match values |> Array.tryFind (fun x -> x |> snd = item) with
-      | Some tuple -> tuple |> fst
+    let lookup (values: (double * string)[]) (item: string) =
+      match values |> Array.tryFind (fun x -> snd x = item) with
+      | Some tuple -> fst tuple
       | None -> 0.0
 
     let constraintCoefficients =
@@ -356,18 +382,26 @@ type ISimplexResultProvider =
       intRestrictions
     )
 
-  new(objective: LPObjective, constraints: LPConstraint[])=
+  new (objective: LPObjective, constraints: LPConstraint[]) =
     let varCount =
       objective.LinearSum
       |> Array.append (constraints |> Array.collect (fun x -> x.LeftSide))
-      |> Array.distinctBy (fun x -> x |> snd)  |> Array.length
+      |> Array.distinctBy snd
+      |> Array.length
 
     let signRestrictions = Array.init varCount (fun _ -> SignRestriction.Positive)
-    let intRestrictions = Array.init varCount (fun _ -> IntRestriction.Unrestricted)
+    let intRestrictions  = Array.init varCount (fun _ -> IntRestriction.Unrestricted)
 
-    LPFormulation(
-      objective,
-      constraints,
-      signRestrictions,
-      intRestrictions
-    )
+    LPFormulation(objective, constraints, signRestrictions, intRestrictions)
+
+type ITree<'T> =
+  abstract member Item: 'T
+  abstract member Children: ITree<'T>[]
+
+type SimplexResult =
+  | Optimal of Dictionary<string, double> * double
+  | Unbounded of string
+  | Infeasible of int
+
+type ISimplexResultProvider =
+  abstract member SimplexResult: Option<SimplexResult>
