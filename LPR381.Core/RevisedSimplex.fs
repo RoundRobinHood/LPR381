@@ -201,7 +201,7 @@ type RevisedDualSimplex(item: RevisedSimplexNode, formulation: LPFormulation)=
 
     // Check for negative RHS
     let rhs = bInverse * readyCanon.RHS
-    if rhs.Exists ((>) 0.0) then
+    if rhs.Exists ((>) -1e-9) then
       // Choose leaving variable
       let mutable mostNegative = 0.0
       let mutable leavingBasisIndex = -1

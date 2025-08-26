@@ -59,10 +59,10 @@ type RevisedBranchAndBound(item: RevisedBNBNode, formulation: LPFormulation)=
 
           let less_canon = canon.WithConstraint(LPConstraint([| (1.0, variable_name) |], ConstraintSign.LessOrEqual, floor(solution_rhs.[branch_basis_index])))
           let great_canon = canon.WithConstraint(LPConstraint([| (1.0, variable_name) |], ConstraintSign.GreaterOrEqual, ceil(solution_rhs.[branch_basis_index])))
-          
+
           let new_column = Vector<double>.Build.Dense(node.basis.Length + 1, 0.0)
           new_column.[node.basis.Length] <- 1.0
-          
+
           let less_bInverse = node.bInverse.InsertRow(node.basis.Length, -node.bInverse.Row branch_basis_index).InsertColumn(node.basis.Length, new_column)
           let more_bInverse = node.bInverse.InsertRow(node.basis.Length, node.bInverse.Row branch_basis_index).InsertColumn(node.basis.Length, new_column)
 
@@ -76,7 +76,7 @@ type RevisedBranchAndBound(item: RevisedBNBNode, formulation: LPFormulation)=
 
   new(formulation: LPFormulation)=
     RevisedBranchAndBound(RevisedBNBNode(RevisedDualSimplex formulation), formulation)
-  
+
   interface ITree<RevisedBNBNode> with
     member _.Item = item
     member _.Children = children.Value

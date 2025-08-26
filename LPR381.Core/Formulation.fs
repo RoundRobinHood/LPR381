@@ -142,6 +142,9 @@ type LPConstraint(
       error <- sprintf "Invalid constraint sign: '%s'" s
       false
 
+  new(variableNames: string array, values: Vector<double>, constraintSign: ConstraintSign, rhs: double)=
+    LPConstraint(Array.zip (values.ToArray()) variableNames, constraintSign, rhs)
+
 
 type LPCanonical(
   objectiveType: ObjectiveType,

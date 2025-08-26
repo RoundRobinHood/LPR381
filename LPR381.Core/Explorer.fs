@@ -10,13 +10,14 @@ module Explorer =
 
     let mutable bestOptimal : Option<SimplexResult> = None
     let mutable infeasibleFound = false
+    let mutable infeasibleConstraint = -1
 
     let rec loop () =
       if queue.Count = 0 then
         // Decide final outcome
         match bestOptimal with
         | Some opt -> opt
-        | None when infeasibleFound -> Infeasible -1
+        | None when infeasibleFound -> Infeasible infeasibleConstraint
         | None -> Infeasible -1
       else
         let node = queue.Dequeue()
@@ -34,8 +35,9 @@ module Explorer =
           | _ -> ()
           node.Children |> Array.iter queue.Enqueue
           loop ()
-        | Some (Infeasible _) ->
+        | Some (Infeasible constraintNum) ->
           infeasibleFound <- true
+          infeasibleConstraint <- constraintNum
           node.Children |> Array.iter queue.Enqueue
           loop ()
         | None ->
@@ -82,7 +84,7 @@ module Explorer =
         | node :: rest ->
           let item = node.Item
           match item.State with
-          | ResultState state ->
+          | RevisedBNBState.ResultState state ->
             if is_better_solution best_solution state then
               iterate (Some state) rest
             else
