@@ -158,6 +158,40 @@ type LPCanonical(
   member val VariableNames = variableNames
   member val VarIntRestrictions = varIntRestrictions
 
+  member this.WithConstraint(constraintObject: LPConstraint)=
+    let lookup (values: (double * string)[]) (item: string)=
+      match values |> Array.tryFind (fun x -> x |> snd = item) with
+      | Some tuple -> tuple |> fst
+      | None -> 0.0
+
+    let newRow = variableNames |> Array.map (lookup constraintObject.LeftSide) |> Vector<double>.Build.Dense
+    let newColumn = Vector<double>.Build.Dense (constraintCoefficients.RowCount + 1, 0.0)
+    newColumn.[constraintCoefficients.RowCount] <- 1.0
+
+    match constraintObject.ConstraintSign with
+      | ConstraintSign.LessOrEqual -> 
+        let newMatrix = constraintCoefficients.InsertRow(constraintCoefficients.RowCount, newRow).InsertColumn(constraintCoefficients.ColumnCount, newColumn)
+        let newRHS = Vector<double>.Build.Dense(rhs.Count + 1, constraintObject.RightSide)
+        rhs.CopySubVectorTo(newRHS, 0, 0, rhs.Count)
+        let newVarNames = Array.append variableNames [| sprintf "s%d" newColumn.Count |]
+        let newIntRestrictions =  Array.append varIntRestrictions [| IntRestriction.Unrestricted |]
+        let newObjective = Vector<double>.Build.Dense(newRow.Count + 1, 0.0)
+        objective.CopySubVectorTo(newObjective, 0, 0, objective.Count)
+        LPCanonical(objectiveType, newObjective, newMatrix, newRHS, newVarNames, newIntRestrictions)
+      | ConstraintSign.GreaterOrEqual ->
+        let newMatrix = constraintCoefficients.InsertRow(constraintCoefficients.RowCount, -newRow).InsertColumn(constraintCoefficients.ColumnCount, newColumn)
+        let newRHS = Vector<double>.Build.Dense(rhs.Count + 1, -constraintObject.RightSide)
+        rhs.CopySubVectorTo(newRHS, 0, 0, rhs.Count)
+        let newVarNames = Array.append variableNames [| sprintf "e%d" newColumn.Count |]
+        let newIntRestrictions = Array.append varIntRestrictions [| IntRestriction.Unrestricted |]
+        let newObjective = Vector<double>.Build.Dense(newRow.Count + 1, 0.0)
+        objective.CopySubVectorTo(newObjective, 0, 0, objective.Count)
+        LPCanonical(objectiveType, newObjective, newMatrix, newRHS, newVarNames, newIntRestrictions)
+      | ConstraintSign.Equal ->
+        this.WithConstraint(LPConstraint(constraintObject.LeftSide, ConstraintSign.LessOrEqual, constraintObject.RightSide))
+            .WithConstraint(LPConstraint(constraintObject.LeftSide, ConstraintSign.GreaterOrEqual, constraintObject.RightSide))
+      | s -> failwithf "Invalid constraint sign: %A" s
+
 type LPFormulation(
   objectiveType: ObjectiveType,
   varNames: string[],
@@ -363,11 +397,12 @@ type LPFormulation(
 type ITree<'T> =
   abstract member Item: 'T
   abstract member Children: ITree<'T>[]
+  abstract member Formulation: LPFormulation
 
 type SimplexResult =
-  | Optimal of Dictionary<string, double> * double
-  | Unbounded of string
-  | Infeasible of int
+  | Optimal of canonicalVars:Dictionary<string, double> * formulationVars:Dictionary<string, double> * objectiveValue:double
+  | Unbounded of variableName:string
+  | Infeasible of stoppingConstraint:int
 
 type ISimplexResultProvider =
   abstract member SimplexResult: Option<SimplexResult>

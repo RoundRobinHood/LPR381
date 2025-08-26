@@ -74,7 +74,7 @@ type PrimalSimplex(item: SimplexNode, objectiveType: ObjectiveType, formulation:
           var_dict.[tableau.ColumnNames.[i]] <- tableau.Values.[oneRow, tableau.values.ColumnCount - 1]
       {
         Tableau= tableau
-        State= ResultState (Optimal (formulation.fromLPCanonical var_dict, tableau.Values.[0, tableau.values.ColumnCount - 1]))
+        State= ResultState (Optimal (var_dict, formulation.fromLPCanonical var_dict, tableau.Values.[0, tableau.values.ColumnCount - 1]))
       }
     else
       // Choose leaving variable
@@ -134,3 +134,4 @@ type PrimalSimplex(item: SimplexNode, objectiveType: ObjectiveType, formulation:
   interface ITree<SimplexNode> with
     member _.Item = item
     member _.Children = children.Value
+    member _.Formulation = formulation

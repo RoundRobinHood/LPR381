@@ -10,8 +10,9 @@
     <Compile Include="Formulation.fs" />
     <Compile Include="RevisedSimplex.fs" />
     <Compile Include="PrimalSimplex.fs" />
-    <Compile Include="Explorer.fs" />
+    <Compile Include="BranchAndBound.fs" />
     <Compile Include="InputFile.fs" />
+    <Compile Include="Explorer.fs" />
   </ItemGroup>
 
   <ItemGroup />
