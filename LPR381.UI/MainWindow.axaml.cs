@@ -284,7 +284,7 @@ public partial class MainWindow : Window
                     }
 
                     OutputBox.Text = sb.ToString();
-                    IterationsBox.Text = string.Join("\n", dumps);   // <ï¿½ show all captured tableaus
+                    IterationsBox.Text = string.Join("\n", dumps);   // <— show all captured tableaus
                     break;
                 }
 

@@ -11,8 +11,6 @@
     <Compile Include="RevisedSimplex.fs" />
     <Compile Include="PrimalSimplex.fs" />
     <Compile Include="Explorer.fs" />
-
-	  <Compile Include="TestPrimalSimplex.fsx"/>
   </ItemGroup>
 
   <ItemGroup />

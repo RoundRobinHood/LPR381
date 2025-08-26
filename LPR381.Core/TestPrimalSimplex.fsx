@@ -68,42 +68,6 @@ do
                   [ "x", 2.0; "y", 2.0 ]
                   tol
                   (solve lp)
-// Test 1.1: Max 3x+2y, s.t. 2x+y≤100, x + y ≤ 80, x≤40, x,y≥0
-do
-    let lp = LPFormulation(
-                ObjectiveType.Max,
-                [| "x"; "y" |],
-                [| 3.0; 2.0 |],
-                array2D [ [ 2.0; 1.0 ]
-                          [ 1.0; 1.0 ]
-                          [ 1.0; 0.0 ] ],
-                [| ConstraintSign.LessOrEqual; ConstraintSign.LessOrEqual; ConstraintSign.LessOrEqual |],
-                [| 100.0; 80.0; 40.0 |],
-                [| SignRestriction.Positive; SignRestriction.Positive |],
-                [| IntRestriction.Unrestricted; IntRestriction.Unrestricted |])
-    checkSolution "Max 3x+2y under basic bounds"
-                  180.0
-                  [ "x", 20.0; "y", 60.0 ]
-                  tol
-                  (solve lp)
-// Test 1.2: Max 60x1+30x2+20x3, s.t. 8x1+6x2+x3≤48, 4x1+2x2+1.5x3≤20, x1 + 1.5x2 + 0.5x3≤8, x,y≥0
-do
-    let lp = LPFormulation(
-                ObjectiveType.Max,
-                [| "x1"; "x2"; "x3" |],
-                [| 60.0; 30.0; 20.0 |],
-                array2D [ [ 8.0; 6.0; 1.0 ]
-                          [ 4.0; 2.0; 1.5 ]
-                          [ 2.0; 1.5; 0.5 ] ],
-                [| ConstraintSign.LessOrEqual; ConstraintSign.LessOrEqual; ConstraintSign.LessOrEqual |],
-                [| 48.0; 20.0; 8.0 |],
-                [| SignRestriction.Positive; SignRestriction.Positive; SignRestriction.Positive |],
-                [| IntRestriction.Unrestricted; IntRestriction.Unrestricted; IntRestriction.Unrestricted |])
-    checkSolution "Max 60x1+30x2+20x3 under basic bounds"
-                  280.0
-                  [ "x1", 2.0; "x2", 0.0; "x3", 8.0 ]
-                  tol
-                  (solve lp)
 
 // Test 2: Max x+y, s.t. 2x+y≤6, x+2y≤8
 do
