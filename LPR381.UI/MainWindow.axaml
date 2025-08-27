@@ -68,8 +68,8 @@
 
 										<!-- Algorithm Selection -->
 										<TextBlock Text="Select Algorithm" FontWeight="Bold" Margin="0,10,0,5"/>
-										<ComboBox x:Name="AlgorithmCombo" Width="200" Margin="0,3">
-											<ComboBoxItem Content="Primal Simplex" IsSelected="True"/>
+										<ComboBox x:Name="AlgorithmCombo" Width="200" Margin="0,3" SelectedIndex="0">
+											<ComboBoxItem Content="Primal Simplex"/>
 											<ComboBoxItem Content="Revised Simplex" />
 											<ComboBoxItem Content="Branch &amp; Bound" />
 											<ComboBoxItem Content="Cutting Plane" />
