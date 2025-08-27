@@ -89,6 +89,10 @@ type RevisedSimplexNode=
           Primal(nonBasicVars, x_B.ToArray(), ratios.ToArray(), enteringColumn.ToArray())
       | _ -> failwith "Price out info not available: not a pivoting table"
 
+    member this.ObjectiveValue =
+      let c_B = this.basis |> Array.map (fun x -> this.Canon.Objective.[x]) |> Vector.Build.Dense
+      c_B.DotProduct(this.bInverse * this.canon.RHS)
+
   interface ISimplexResultProvider with
     member this.SimplexResult = 
       match this.state with
@@ -129,7 +133,7 @@ type RevisedPrimalSimplex(item: RevisedSimplexNode, formulation: LPFormulation)=
         canon= canon
         basis= basis
         bInverse= bInverse
-        state= ResultState (Optimal(formulation.fromLPCanonical var_dict, objective_value))
+        state= ResultState (Optimal(var_dict, formulation.fromLPCanonical var_dict, objective_value))
       }
 
     else
@@ -185,6 +189,7 @@ type RevisedPrimalSimplex(item: RevisedSimplexNode, formulation: LPFormulation)=
   interface ITree<RevisedSimplexNode> with
     member _.Item = item
     member _.Children = children.Value
+    member _.Formulation = formulation
 
 type RevisedDualSimplex(item: RevisedSimplexNode, formulation: LPFormulation)=
   static let node(basis: array<int>, canon: LPCanonical, bInverse: Matrix<double>, formulation: LPFormulation)=
@@ -196,7 +201,7 @@ type RevisedDualSimplex(item: RevisedSimplexNode, formulation: LPFormulation)=
 
     // Check for negative RHS
     let rhs = bInverse * readyCanon.RHS
-    if rhs.Exists ((>) 0.0) then
+    if rhs.Exists ((>) -1e-9) then
       // Choose leaving variable
       let mutable mostNegative = 0.0
       let mutable leavingBasisIndex = -1
@@ -212,7 +217,7 @@ type RevisedDualSimplex(item: RevisedSimplexNode, formulation: LPFormulation)=
       let mutable enteringVariable = -1
       let ratios = Array.init readyCanon.Objective.Count (fun _ -> 0.0)
       for i in [ 0 .. readyCanon.Objective.Count - 1 ] do
-        if constraintRow.[i] < 0 then
+        if constraintRow.[i] < -1e-9 && basis |> Array.exists ((=) i) |> not then
           let reducedCost = readyCanon.Objective.[i] - c_B.DotProduct(bInverse * readyCanon.ConstraintMatrix.Column i)
           let ratio = abs(reducedCost / constraintRow.[i])
           if ratio < minRatio then
@@ -264,7 +269,7 @@ type RevisedDualSimplex(item: RevisedSimplexNode, formulation: LPFormulation)=
           canon= canon
           basis= basis
           bInverse= bInverse
-          state= ResultState (Optimal(formulation.fromLPCanonical var_dict, objective_value))
+          state= ResultState (Optimal(var_dict, formulation.fromLPCanonical var_dict, objective_value))
         }
 
       else
@@ -316,6 +321,10 @@ type RevisedDualSimplex(item: RevisedSimplexNode, formulation: LPFormulation)=
     let basis = [| canon.Objective.Count - canon.RHS.Count .. canon.Objective.Count - 1 |]
     RevisedDualSimplex(node(basis, canon, Matrix<double>.Build.DenseIdentity basis.Length, formulation), formulation)
 
+  new(formulation: LPFormulation, canon: LPCanonical, basis: int[], bInverse: Matrix<double>)=
+    RevisedDualSimplex(node (basis, canon, bInverse, formulation), formulation)
+
   interface ITree<RevisedSimplexNode> with
     member _.Item = item
     member _.Children = children.Value
+    member _.Formulation = formulation

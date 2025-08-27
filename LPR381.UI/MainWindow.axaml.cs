@@ -1,7 +1,5 @@
 ﻿using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Interactivity;
-using Avalonia.Layout;
 using LPR381.Core;
 using Microsoft.FSharp.Core;
 using System.Linq;
@@ -17,6 +15,10 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
+        int result = Logic.add(3, 4);
+
+        this.Title = $"3 + 4 = {result}";
     }
 
     // --- New lightweight parser for linear expressions like "3x1 - 2x2 + x3" (no LPObjective/LPConstraint) ---
