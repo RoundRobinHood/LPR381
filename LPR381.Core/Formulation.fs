@@ -1,5 +1,7 @@
 namespace LPR381.Core
 
+open System
+open System.Globalization
 open System.Collections.Generic
 open MathNet.Numerics.LinearAlgebra
 
@@ -145,19 +147,19 @@ type LPConstraint(
 
 
 type LPCanonical(
-    objectiveType: ObjectiveType,
-    objective: Vector<double>,
-    constraintCoefficients: Matrix<double>,
-    rhs: Vector<double>,
-    variableNames: string[],
-    varIntRestrictions: IntRestriction[]
+  objectiveType: ObjectiveType,
+  objective: Vector<double>,
+  constraintCoefficients: Matrix<double>,
+  rhs: Vector<double>,
+  variableNames: string[],
+  varIntRestrictions: IntRestriction[]
 ) =
-    member val ObjectiveType = objectiveType
-    member val Objective = objective
-    member val ConstraintMatrix = constraintCoefficients
-    member val RHS = rhs
-    member val VariableNames = variableNames
-    member val VarIntRestrictions = varIntRestrictions
+  member val ObjectiveType = objectiveType
+  member val Objective = objective
+  member val ConstraintMatrix = constraintCoefficients
+  member val RHS = rhs
+  member val VariableNames = variableNames
+  member val VarIntRestrictions = varIntRestrictions
 
   member this.WithConstraint(constraintObject: LPConstraint)=
     let lookup (values: (double * string)[]) (item: string)=
@@ -194,23 +196,23 @@ type LPCanonical(
       | s -> failwithf "Invalid constraint sign: %A" s
 
 type LPFormulation(
-    objectiveType: ObjectiveType,
-    varNames: string[],
-    objective: double[],
-    constraintCoefficients: double[,],
-    constraintSigns: ConstraintSign[],
-    rhs: double[],
-    varSignRestrictions: SignRestriction[],
-    varIntRestrictions: IntRestriction[]
+  objectiveType: ObjectiveType,
+  varNames: string[],
+  objective: double[],
+  constraintCoefficients: double[,],
+  constraintSigns: ConstraintSign[],
+  rhs: double[],
+  varSignRestrictions: SignRestriction[],
+  varIntRestrictions: IntRestriction[]
 ) =
-    member val ObjectiveType = objectiveType
-    member val VarNames = varNames
-    member val Objective = objective
-    member val ConstraintCoefficients = constraintCoefficients
-    member val ConstraintSigns = constraintSigns
-    member val RHS = rhs
-    member val VarSignRestrictions = varSignRestrictions
-    member val VarIntRestrictions = varIntRestrictions
+  member val ObjectiveType = objectiveType
+  member val VarNames = varNames
+  member val Objective = objective
+  member val ConstraintCoefficients = constraintCoefficients
+  member val ConstraintSigns = constraintSigns
+  member val RHS = rhs
+  member val VarSignRestrictions = varSignRestrictions
+  member val VarIntRestrictions = varIntRestrictions
 
   member this.ToLPCanonical() =
     // Step 1: Calculate final matrix size
@@ -225,11 +227,11 @@ type LPFormulation(
     let constraintCount = constrIneqCount + 2 * constrEqualCount + binCount
     let variableCount = posNegCount + 2 * ursCount + constraintCount
 
-      let objective = Vector<double>.Build.Dense(variableCount, 0.0)
-      let constraintMat = Matrix<double>.Build.Dense(constraintCount, variableCount, 0.0)
-      let rhs = Vector<double>.Build.Dense(constraintCount, 0.0)
-      let variableNames = Array.create variableCount ""
-      let mutable varIntRestrictions = Array.create (variableCount - this.VarIntRestrictions.Length) IntRestriction.Unrestricted |> Array.append this.VarIntRestrictions
+    let objective = Vector<double>.Build.Dense(variableCount, 0.0)
+    let constraintMat = Matrix<double>.Build.Dense(constraintCount, variableCount, 0.0)
+    let rhs = Vector<double>.Build.Dense(constraintCount, 0.0)
+    let variableNames = Array.create variableCount ""
+    let mutable varIntRestrictions = Array.create (variableCount - this.VarIntRestrictions.Length) IntRestriction.Unrestricted |> Array.append this.VarIntRestrictions
 
     // Step 1: Set up variable names & objective row
     let mutable writeColumn = 0
@@ -277,17 +279,13 @@ type LPFormulation(
       for i in [| 0 .. this.ConstraintCoefficients.GetLength 1 - 1 |] do
         match this.VarSignRestrictions.[i] with
         | SignRestriction.Positive ->
-          variableNames.[writeColumn] <- this.VarNames.[i]
-          objective.[writeColumn] <- this.Objective.[i]
+          row.[column] <- this.ConstraintCoefficients.[readIdx,i]
         | SignRestriction.Negative ->
-          variableNames.[writeColumn] <- sprintf "%s-" this.VarNames.[i]
-          objective.[writeColumn] <- -this.Objective.[i]
+          row.[column] <- -this.ConstraintCoefficients.[readIdx, i]
         | SignRestriction.Unrestricted ->
-          variableNames.[writeColumn] <- sprintf "%s+" this.VarNames.[i]
-          objective.[writeColumn] <- this.Objective.[i]
-          writeColumn <- writeColumn + 1
-          variableNames.[writeColumn] <- sprintf "%s-" this.VarNames.[i]
-          objective.[writeColumn] <- -this.Objective.[i]
+          row.[column] <- this.ConstraintCoefficients.[readIdx, i]
+          column <- column + 1
+          row.[column] <- -this.ConstraintCoefficients.[readIdx, i]
         | _ -> ()
         column <- column + 1
       row
@@ -317,18 +315,12 @@ type LPFormulation(
         writeRow <- writeRow + 1
         writeColumn <- writeColumn + 1
 
-      for i in [| 0 .. this.ConstraintSigns.Length - 1 |] do
-        match this.ConstraintSigns.[i] with
-        | ConstraintSign.LessOrEqual ->
-          variableNames.[writeColumn] <- sprintf "s%d" (i + 1)
-        | ConstraintSign.Equal ->
-          variableNames.[writeColumn] <- sprintf "s%d" (i + 1)
-          writeColumn <- writeColumn + 1
-          variableNames.[writeColumn] <- sprintf "e%d" (i + 1)
-        | ConstraintSign.GreaterOrEqual ->
-          variableNames.[writeColumn] <- sprintf "e%d" (i + 1)
-        | _ -> ()
-        writeColumn <- writeColumn + 1         
+        row2.[writeColumn] <- 1
+        constraintMat.SetRow(writeRow, row2)
+        rhs.[writeRow] <- -this.RHS.[i]
+      | _ -> ()
+      writeColumn <- writeColumn + 1
+      writeRow <- writeRow + 1
 
     // Step 3: Add constraints for binary variables
     for i in [| 0 .. this.VarIntRestrictions.Length - 1 |] do
@@ -343,23 +335,7 @@ type LPFormulation(
         varIntRestrictions.[i] <- IntRestriction.Integer
       | _ -> ()
 
-      // Step 2: Constraints     
-      let getVarCoefficients readIdx =
-        let row = Vector<double>.Build.Dense(variableCount, 0.0)
-        let mutable column = 0
-        for i in [| 0 .. this.ConstraintCoefficients.GetLength 1 - 1 |] do
-          match this.VarSignRestrictions.[i] with
-          | SignRestriction.Positive ->
-            row.[column] <- this.ConstraintCoefficients.[readIdx,i]
-          | SignRestriction.Negative ->
-            row.[column] <- -this.ConstraintCoefficients.[readIdx, i]
-          | SignRestriction.Unrestricted ->
-            row.[column] <- this.ConstraintCoefficients.[readIdx, i]
-            column <- column + 1
-            row.[column] <- -this.ConstraintCoefficients.[readIdx, i]
-          | _ -> ()
-          column <- column + 1
-        row
+    LPCanonical(this.ObjectiveType, objective, constraintMat, rhs, variableNames, varIntRestrictions)
 
   member this.fromLPCanonical(var_dict: Dictionary<string, double>)=
     let ret = Dictionary<string, double>()
@@ -384,34 +360,35 @@ type LPFormulation(
       |> Array.append (constraints |> Array.map (fun x -> x.LeftSide |> Array.map snd))
       |> Parsing.bordaCount
 
-          row1.[writeColumn] <- 1
-          constraintMat.SetRow(writeRow, row1)
-          rhs.[writeRow] <- this.RHS.[i]
+    let lookup (values: (double * string)[]) (item: string)=
+      match values |> Array.tryFind (fun x -> x |> snd = item) with
+      | Some tuple -> tuple |> fst
+      | None -> 0.0
 
-          writeRow <- writeRow + 1
-          writeColumn <- writeColumn + 1
+    let constraintCoefficients =
+      constraints
+      |> Array.map (fun x -> variableNames |> Array.map (lookup x.LeftSide))
+      |> array2D
 
-          row2.[writeColumn] <- 1
-          constraintMat.SetRow(writeRow, row2)
-          rhs.[writeRow] <- -this.RHS.[i]
-        | _ -> ()
-        writeColumn <- writeColumn + 1
-        writeRow <- writeRow + 1
+    LPFormulation(
+      objective.ObjectiveType,
+      variableNames,
+      objective.LinearSum |> Array.map fst,
+      constraintCoefficients,
+      constraints |> Array.map (fun x -> x.ConstraintSign),
+      constraints |> Array.map (fun x -> x.RightSide),
+      signRestrictions,
+      intRestrictions
+    )
 
-      // Step 3: Add constraints for binary variables
-      for i in [| 0 .. this.VarIntRestrictions.Length - 1 |] do
-        match this.VarIntRestrictions.[i] with
-        | IntRestriction.Unrestricted | IntRestriction.Integer -> ()
-        | IntRestriction.Binary ->
-          constraintMat.[writeRow, i] <- 1
-          constraintMat.[writeRow, writeColumn] <- 1
-          rhs.[writeRow] <- 1
-          writeRow <- writeRow + 1
-          writeColumn <- writeColumn + 1
-          varIntRestrictions.[i] <- IntRestriction.Integer
-        | _ -> ()
+  new(objective: LPObjective, constraints: LPConstraint[])=
+    let varCount =
+      objective.LinearSum
+      |> Array.append (constraints |> Array.collect (fun x -> x.LeftSide))
+      |> Array.distinctBy (fun x -> x |> snd)  |> Array.length
 
-      LPCanonical(this.ObjectiveType, objective, constraintMat, rhs, variableNames, varIntRestrictions)
+    let signRestrictions = Array.init varCount (fun _ -> SignRestriction.Positive)
+    let intRestrictions = Array.init varCount (fun _ -> IntRestriction.Unrestricted)
 
     LPFormulation(
       objective,
