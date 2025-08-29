@@ -12,6 +12,7 @@
     <Compile Include="PrimalSimplex.fs" />
     <Compile Include="BranchAndBound.fs" />
     <Compile Include="CuttingPlanes.fs" />
+    <Compile Include="Knapsack.fs" />
     <Compile Include="InputFile.fs" />
     <Compile Include="Explorer.fs" />
   </ItemGroup>

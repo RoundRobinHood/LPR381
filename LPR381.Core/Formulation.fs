@@ -145,6 +145,24 @@ type LPConstraint(
   new(variableNames: string array, values: Vector<double>, constraintSign: ConstraintSign, rhs: double)=
     LPConstraint(Array.zip (values.ToArray()) variableNames, constraintSign, rhs)
 
+type KnapsackCanonical(
+  variableNames: string array,
+  objective: Vector<double>,
+  weights: Vector<double>,
+  maxWeight: double
+) =
+  let rankOrder = lazy (
+      Array.zip (objective.ToArray()) (weights.ToArray())
+      |> Array.mapi (fun i (z, c) -> i, z / c)
+      |> Array.sortByDescending snd
+      |> Array.map fst
+    )
+
+  member val Objective = objective
+  member val VariableNames = variableNames
+  member val Weights = weights
+  member val MaxWeight = maxWeight
+  member _.RankOrder = rankOrder.Value
 
 type LPCanonical(
   objectiveType: ObjectiveType,
@@ -205,6 +223,15 @@ type LPFormulation(
   varSignRestrictions: SignRestriction[],
   varIntRestrictions: IntRestriction[]
 ) =
+  do
+    if objective.Length <> varNames.Length then invalidArg "varNames" "VarNames dimensions mismatch with objective length"
+    if objective.Length <> constraintCoefficients.GetLength 1 then invalidArg "constraintCoefficients" "Constraint coefficients dimensions mismatch with objective length"
+    if objective.Length <> varSignRestrictions.Length then invalidArg "varSignRestrictions" "Sign restrictions must be same length as objective"
+    if objective.Length <> varIntRestrictions.Length then invalidArg "varIntRestrictions" "Int restrictions must be same length as objective"
+    
+    if rhs.Length <> constraintCoefficients.GetLength 0 then invalidArg "constraintCoefficients" "Constraint coefficients must have the same row count as rhs"
+    if rhs.Length <> constraintSigns.Length then invalidArg "constraintSigns" "Constraint signs must be the same length as rhs"
+
   member val ObjectiveType = objectiveType
   member val VarNames = varNames
   member val Objective = objective
@@ -213,6 +240,18 @@ type LPFormulation(
   member val RHS = rhs
   member val VarSignRestrictions = varSignRestrictions
   member val VarIntRestrictions = varIntRestrictions
+
+  member _.ToKnapsackCanonical() =
+    if varIntRestrictions |> Array.exists ((<>) IntRestriction.Binary) then failwith "Invalid knapsack: all variables should be binary"
+    if constraintCoefficients.GetLength 0 <> 1 then failwith "Invalid knapsack: multiple constraints"
+    if constraintSigns.[0] <> ConstraintSign.LessOrEqual then failwith "Invalid knapsack: constraint must be <="
+    if objective |> Array.exists ((>) 0.0) then failwith "Invalid knapsack: objective coefficients must be positive"
+    if objectiveType <> ObjectiveType.Max then failwith "Invalid knapsack: objective must be max"
+
+    let weights = [| 0 .. objective.Length - 1 |] |> Array.map (Array2D.get constraintCoefficients 0)
+
+    KnapsackCanonical(varNames, Vector<double>.Build.Dense objective, Vector<double>.Build.Dense weights, rhs.[0])
+
 
   member this.ToLPCanonical() =
     // Step 1: Calculate final matrix size
