@@ -27,49 +27,67 @@ namespace LPR381.UI.Solvers
             {
                 _iters.Clear();
 
-                // Build a formulation that honors integrality (defaults to all-integer)
-                var (model, varNames, isIntVar) = BuildIntegerFormulation(input);
+                // Build formulation (honors IntMode & optional "int:/bin:" list)
+                var (model, varNames, isIntVar, objType) = BuildIntegerFormulation(input);
 
-                // Read objective type so we can keep the BEST integer solution
-                var objType = model.ObjectiveType;
+                // Best-so-far tracking (incumbent)
+                double bestZ = (objType == ObjectiveType.Max) ? double.NegativeInfinity : double.PositiveInfinity;
+                var bestVars = new Dictionary<string, double>();
+                bool Better(double zNew, double zOld)
+                    => objType == ObjectiveType.Max ? zNew > zOld + 1e-9 : zNew < zOld - 1e-9;
 
-                // Strongly-typed BnB (from your BranchAndBound.fs)
+                // Counters (optional, appended to summary)
+                int visited = 0, branched = 0, leaves = 0, fathomed = 0;
+
+                // Root of B&B from your F#
                 ITree<RevisedBNBNode> root = new RevisedBranchAndBound(model);
 
                 var summary = new SolveSummary();
-                double bestZ = (objType == ObjectiveType.Max) ? double.NegativeInfinity : double.PositiveInfinity;
 
-                bool Better(double zNew, double zOld) =>
-                    objType == ObjectiveType.Max ? zNew > zOld + 1e-9 : zNew < zOld - 1e-9;
-
-                var stack = new Stack<(ITree<RevisedBNBNode> node, int depth)>();
-                stack.Push((root, 0));
-
-                while (stack.Count > 0)
+                // Recursive DFS so we can emit an explicit "Backtrack" entry on unwind
+                void Explore(ITree<RevisedBNBNode> cur, int depth, string path)
                 {
-                    var (cur, depth) = stack.Pop();
-                    var item = cur.Item;               // RevisedBNBNode
+                    visited++;
 
-                    // Decode state DU for titles (Branch(variableIndex, variableName) | ResultState(SimplexResult))
-                    var uf = FSharpValue.GetUnionFields(item.State, item.State.GetType(), null);
+                    var node = cur.Item;                    // RevisedBNBNode
+                    var children = cur.Children;
+
+                    // Decode state DU for a friendly title
+                    var uf = FSharpValue.GetUnionFields(node.State, node.State.GetType(), null);
                     var stateName = uf.Item1.Name;
                     var stateFields = uf.Item2;
 
-                    // Pull the subproblem solution (LP relaxation at this node)
-                    var (hasSol, solVars, z) = TryGetSolution(item);
+                    // Subproblem LP-relaxation solution at this node (if any)
+                    var (hasSol, solVars, z, resultCase) = TryGetSolution(node);
 
-                    // If this is a branch state, display the chosen variable’s value and floor/ceil
+                    // Node status (bound/integral) table — always add one per node
+                    {
+                        var t = new double[1, 3];
+                        t[0, 0] = hasSol ? z : double.NaN;                       // Bound from LP relaxation
+                        t[0, 1] = (bestVars.Count == 0) ? double.NaN :           // Best-so-far
+                                  bestZ;
+                        t[0, 2] = IsIntegral(solVars, varNames, isIntVar) ? 1 : 0; // Integral flag (1/0)
+
+                        var title = $"Node {path} – {stateName}";
+                        _iters.Add(new IterationTableau
+                        {
+                            Title = $"{title} – status",
+                            Columns = new[] { "bound(z*)", "best", "integral?" },
+                            Rows = new[] { "status" },
+                            Values = t
+                        });
+                    }
+
+                    // Branch decision (value / floor / ceil)
                     if (stateName == "Branch" && stateFields.Length >= 2 && hasSol)
                     {
                         var varIndex = (int)stateFields[0];
                         var varName = stateFields[1]?.ToString() ?? $"x{varIndex + 1}";
-
-                        // Try the named variable’s value; otherwise any fractional integer variable
                         double value = solVars.TryGetValue(varName, out var v)
-                            ? v
-                            : solVars.Where(kv => IsIntName(kv.Key, varNames, isIntVar))
-                                     .Select(kv => kv.Value)
-                                     .FirstOrDefault(double.NaN);
+                                     ? v
+                                     : solVars.Where(kv => IsIntName(kv.Key, varNames, isIntVar))
+                                              .Select(kv => kv.Value)
+                                              .FirstOrDefault(double.NaN);
 
                         var t = new double[1, 3];
                         t[0, 0] = value;
@@ -78,15 +96,20 @@ namespace LPR381.UI.Solvers
 
                         _iters.Add(new IterationTableau
                         {
-                            Title = $"Node {depth} – branch on {varName}",
+                            Title = $"Node {path} – branch on {varName}",
                             Columns = new[] { "value", "floor", "ceil" },
                             Rows = new[] { varName },
                             Values = t
                         });
+
+                        branched++;
                     }
 
-                    // If this node produces an optimal subproblem solution, show the vector
-                    if (hasSol && !double.IsNaN(z))
+                    // Sub-problem snapshot (B^{-1}) if available
+                    TryAddSubproblemSnapshot(node, path);
+
+                    // If optimal LP solution exists, show it as a vector
+                    if (hasSol)
                     {
                         var rows = solVars.Keys.ToArray();
                         var vals = new double[rows.Length, 1];
@@ -94,16 +117,17 @@ namespace LPR381.UI.Solvers
 
                         _iters.Add(new IterationTableau
                         {
-                            Title = $"Node {depth} – {stateName}",
+                            Title = $"Node {path} – {resultCase}",
                             Columns = new[] { "value" },
                             Rows = rows,
                             Values = vals
                         });
 
-                        // Keep the BEST integral solution seen so far (not just the first)
-                        if (IsIntegral(solVars, varNames, isIntVar) && Better(z, bestZ))
+                        // Update incumbent if integral and better
+                        if (IsIntegral(solVars, varNames, isIntVar) && (bestVars.Count == 0 || Better(z, bestZ)))
                         {
                             bestZ = z;
+                            bestVars = new Dictionary<string, double>(solVars);
                             summary.IsOptimal = true;
                             summary.Objective = z;
                             summary.VariableValues = new Dictionary<string, double>(solVars);
@@ -111,22 +135,95 @@ namespace LPR381.UI.Solvers
                         }
                     }
 
-                    // Traverse children (reverse for natural order)
-                    var children = cur.Children;
-                    for (int i = children.Length - 1; i >= 0; --i)
-                        stack.Push((children[i], depth + 1));
+                    // Fathoming (leaf) annotation
+                    if (children.Length == 0)
+                    {
+                        leaves++;
+                        string reason = "exhausted";
+                        if (!hasSol || resultCase == "Infeasible") reason = "infeasible";
+                        else if (IsIntegral(solVars, varNames, isIntVar)) reason = "integral";
+                        else if (bestVars.Count > 0 && !Better(z, bestZ)) reason = "bound";
+
+                        fathomed++;
+                        _iters.Add(new IterationTableau
+                        {
+                            Title = $"Node {path} – FATHOMED ({reason})",
+                            Columns = new[] { "reason" },
+                            Rows = new[] { "—" },
+                            Values = new double[1, 1] { { double.NaN } }   // prints as blank
+                        });
+                    }
+
+                    // Explore children (this *creates and displays all sub-problems*)
+                    for (int i = 0; i < children.Length; i++)
+                        Explore(children[i], depth + 1, path + "." + (i + 1));
+
+                    // Explicit backtrack marker when we unwind this node
+                    _iters.Add(new IterationTableau
+                    {
+                        Title = $"Backtrack from Node {path}",
+                        Columns = new[] { " " },
+                        Rows = new[] { " " },
+                        Values = new double[1, 1] { { double.NaN } }
+                    });
                 }
 
+                // Run DFS
+                Explore(root, 0, "1");
+
+                // Final best-candidate banner (for emphasis at the end)
+                if (bestVars.Count > 0)
+                {
+                    var rows = bestVars.Keys.ToArray();
+                    var vals = new double[rows.Length, 1];
+                    for (int i = 0; i < rows.Length; i++) vals[i, 0] = bestVars[rows[i]];
+
+                    _iters.Add(new IterationTableau
+                    {
+                        Title = $"Best candidate (incumbent) – z = {bestZ}",
+                        Columns = new[] { "value" },
+                        Rows = rows,
+                        Values = vals
+                    });
+                }
+
+                // Append counters to the summary message
                 if (string.IsNullOrEmpty(summary.Message))
-                    summary.Message = summary.IsOptimal ? "Optimal integer solution found." : "Branch & Bound finished.";
+                    summary.Message = "Branch & Bound finished.";
+                summary.Message += $"\nVisited: {visited}, Branched: {branched}, Leaves: {leaves}, Fathomed: {fathomed}.";
 
                 return summary;
             });
         }
 
-        // ---------------- formulation & parsing aligned to Formulation.fs ----------------
+        // ---------- Sub-problem snapshot (B^{-1}) ----------
+        private void TryAddSubproblemSnapshot(RevisedBNBNode bnbNode, string path)
+        {
+            try
+            {
+                var sub = bnbNode.SubSolution; // RevisedSimplexNode
+                var bInv = sub.BInverse;       // double[,]
+                int m = bInv.GetLength(0);
+                var rows = Enumerable.Range(1, m).Select(i => $"r{i}").ToArray();
+                var cols = Enumerable.Range(1, m).Select(i => $"c{i}").ToArray();
 
-        private static (LPFormulation model, string[] varNames, bool[] isIntVar) BuildIntegerFormulation(UserProblem input)
+                _iters.Add(new IterationTableau
+                {
+                    Title = $"Node {path} – Sub-problem B⁻¹",
+                    Columns = cols,
+                    Rows = rows,
+                    Values = bInv
+                });
+            }
+            catch
+            {
+                // if the sub-solver doesn't expose BInverse here, just skip
+            }
+        }
+
+        // ---------- Formulation building (aligned to your Formulation.fs) ----------
+        private static (LPFormulation model, string[] varNames, bool[] isIntVar, ObjectiveType objType)
+            BuildIntegerFormulation(UserProblem input)
         {
             if (input == null) throw new ArgumentNullException(nameof(input));
 
@@ -160,27 +257,27 @@ namespace LPR381.UI.Solvers
             }
 
             // Default sign restrictions = Positive (non-negative)
+            // We'll size this to obj.LinearSum length; the F# ctor will reconcile sizes internally.
             var signR = Enumerable.Repeat(SignRestriction.Positive, obj.LinearSum.Length).ToArray();
 
-            // Integer restrictions from UI mode
+            // Integer restrictions from UI mode / custom list
             var (intR, isInt) = BuildIntRestrictions(obj, cons, input);
 
-            // Use your convenience ctor
+            // Convenience ctor from your Formulation.fs
             var model = new LPFormulation(obj, cons, signR, intR);
 
-            // Read back final names from the model
-            return (model, model.VarNames, isInt);
+            // Variable names after ctor
+            return (model, model.VarNames, isInt, objType);
         }
 
         private static (IntRestriction[] intR, bool[] isInt) BuildIntRestrictions(LPObjective obj, LPConstraint[] cons, UserProblem input)
         {
-            // Build the name list in the same style as the F# ctor
+            // Build names like the F# side: from objective + constraints
             var namesFromObj = obj.LinearSum.Select(t => t.Item2).ToArray();
             var namesFromCons = cons.SelectMany(c => c.LeftSide.Select(t => t.Item2)).ToArray();
             var varNames = namesFromObj.Concat(namesFromCons).Distinct(StringComparer.Ordinal).ToArray();
             int n = varNames.Length;
 
-            // Mode from UI (fix: use the real value, not a typo)
             //var mode = (input.IntMode ?? "integer").Trim().ToLowerInvariant();
             var mode = "integer";
 
@@ -240,6 +337,7 @@ namespace LPR381.UI.Solvers
             return (intR, isInt);
         }
 
+        // ---------- parsing helpers ----------
         private static (ObjectiveType objType, string expr) ExtractObjectiveTypeAndExpr(string raw)
         {
             var s = raw.TrimStart();
@@ -263,9 +361,9 @@ namespace LPR381.UI.Solvers
             return (left, sign, rhs);
         }
 
-        // ----- node/result helpers -----
-
-        private static (bool has, IDictionary<string, double> vars, double z) TryGetSolution(RevisedBNBNode node)
+        // ---------- node/result helpers ----------
+        private static (bool has, IDictionary<string, double> vars, double z, string caseName)
+            TryGetSolution(RevisedBNBNode node)
         {
             try
             {
@@ -273,16 +371,19 @@ namespace LPR381.UI.Solvers
                 if (FSharpDu.TrySome(optMaybe, out var res))
                 {
                     var (caseName, fields) = FSharpDu.ReadUnion(res);
-                    if (caseName == "Optimal")
+                    switch (caseName)
                     {
-                        var vars = FSharpDu.ToDict(fields[1]);  // formulationVars
-                        var z = (double)fields[2];
-                        return (true, vars, z);
+                        case "Optimal":
+                            return (true, FSharpDu.ToDict(fields[1]), (double)fields[2], "Optimal");
+                        case "Unbounded":
+                            return (false, new Dictionary<string, double>(), double.NaN, "Unbounded");
+                        case "Infeasible":
+                            return (false, new Dictionary<string, double>(), double.NaN, "Infeasible");
                     }
                 }
             }
             catch { /* ignore */ }
-            return (false, new Dictionary<string, double>(), double.NaN);
+            return (false, new Dictionary<string, double>(), double.NaN, "");
         }
 
         private static bool IsIntName(string name, string[] varNames, bool[] isIntVar)
