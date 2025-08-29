@@ -89,7 +89,7 @@ module Explorer =
               iterate (Some state) rest
             else
               iterate best_solution rest
-          | Branch _ ->
+          | RevisedBNBState.Branch _ ->
             if shouldnt_bound best_solution item then
               iterate (solve best_solution (node.Children |> Array.toList)) rest
             else
