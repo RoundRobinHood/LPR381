@@ -122,6 +122,7 @@ public partial class MainWindow : Window
         if (string.IsNullOrWhiteSpace(s)) return "";
         if (s.Contains("primal")) return "primal-simplex";
         if (s.Contains("revised")) return "revised-simplex";
+        if (s.Contains("branch") && s.Contains("bound")) return "branch-and-bound";
         return s;
     }
 
@@ -132,6 +133,8 @@ public partial class MainWindow : Window
         {
             "primal-simplex" => new PrimalSimplexRunner(),
             "revised-simplex" => new RevisedSimplexRunner(),
+            "branch-and-bound" or "branch and bound" or "branch&bound" or
+        "bnb" or "b&b" or "branch" => new BranchAndBoundRunner(),
             _ => throw new InvalidOperationException($"Unknown solver key '{key}'.")
         };
     }

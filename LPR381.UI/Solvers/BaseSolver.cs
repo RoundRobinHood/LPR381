@@ -20,7 +20,7 @@ namespace LPR381.UI.Solvers
             // ---------- OBJECTIVE ----------
             var raw = (input.ObjectiveLine ?? "").Trim();
             if (raw.Length == 0)
-                throw new Exception("Objective is empty. Example: 'max z = 3x1 + 2x2'");
+                throw new Exception("Objective Function is empty. Please Enter an Objective Function");
 
             var (objType, objExpr) = ExtractObjectiveTypeAndExpr(raw);
 

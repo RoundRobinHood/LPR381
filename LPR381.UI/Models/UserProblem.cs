@@ -12,5 +12,9 @@ namespace LPR381.UI.Models
         public string ObjectiveLine { get; init; } = "";   // e.g. "max z = 3x1 + 2x2"
         public string[] Constraints { get; init; } = [];   // e.g. "2x1 + 3x2 <= 10"
         public string? DecisionVariablesLine { get; init; } // optional (e.g. "x1, x2 >= 0" or "x1 int")
+        public string IntMode { get; init; } = "continuous";
+
+
     }
+
 }
