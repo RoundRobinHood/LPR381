@@ -4,6 +4,8 @@
 
 #load "Formulation.fs"
 #load "PrimalSimplex.fs"
+#load "RevisedSimplex.fs"
+#load "BranchAndBound.fs"
 #load "Explorer.fs"
 
 open System
@@ -25,7 +27,7 @@ let checkSolution
     (tol: float)
     (res: SimplexResult) =
     match res with
-    | Optimal (vars, obj) ->
+    | Optimal (vars, _, obj) ->
         if not (approxEq tol obj expectedObj) then
             failwithf "Test '%s': objective %.6f != expected %.6f" name obj expectedObj
         expected

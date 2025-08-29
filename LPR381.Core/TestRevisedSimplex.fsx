@@ -4,6 +4,7 @@
 
 #load "Formulation.fs"
 #load "RevisedSimplex.fs"
+#load "BranchAndBound.fs"
 #load "Explorer.fs"
 
 open System
@@ -25,7 +26,7 @@ let checkSolution
     (tol: float)
     (res: SimplexResult) =
     match res with
-    | Optimal (vars, obj) ->
+    | Optimal (vars, _, obj) ->
         if not (approxEq tol obj expectedObj) then
             failwithf "Test '%s': objective %.6f != expected %.6f" name obj expectedObj
         expected
@@ -145,7 +146,7 @@ do
     let r = solve lp
     // Accept either extreme as optimal
     match r with
-    | Optimal (vars, obj) ->
+    | Optimal (vars, _, obj) ->
         if not (approxEq tol obj 5.0) then failwith "Test 'Min x+y, x+y≥5' wrong objective"
         let x = getVar vars "x"
         let y = getVar vars "y"

@@ -34,6 +34,7 @@ module InputFile =
           let line = input.[lineNum]
           if line.StartsWith "+" || line.StartsWith "-" then
             let split = line.Split ' '
+            if split.[0].Length = 1 then lineNum, constraintCoeff, constraintSigns, rhs else
             let coeff = split.[.. split.Length - 2] |> Array.map parseCoeff
             let last = split.[split.Length - 1]
             
