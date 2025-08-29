@@ -121,12 +121,11 @@ type RevisedPrimalSimplex(item: RevisedSimplexNode, formulation: LPFormulation)=
     let x_B = bInverse * readyCanon.RHS
     if enteringVariable = -1 then
       let var_dict = Dictionary<string, double>()
-      let mutable basic_count = 0
       for i in [ 0 .. readyCanon.Objective.Count - 1 ] do
-        if basis |> Array.contains i then
-          var_dict.[readyCanon.VariableNames.[i]] <- x_B.[basic_count]
-          basic_count <- basic_count + 1
-        else
+        match basis |> Array.tryFindIndex ((=) i) with
+        | Some basis_index ->
+          var_dict.[readyCanon.VariableNames.[i]] <- x_B.[basis_index]
+        | None ->
           var_dict.[readyCanon.VariableNames.[i]] <- 0.0
       let objective_value = (basis |> Array.map (fun x -> canon.Objective.[x]) |> Vector.Build.Dense).DotProduct x_B
       {
@@ -257,13 +256,13 @@ type RevisedDualSimplex(item: RevisedSimplexNode, formulation: LPFormulation)=
       let x_B = bInverse * readyCanon.RHS
       if enteringVariable = -1 then
         let var_dict = Dictionary<string, double>()
-        let mutable basic_count = 0
         for i in [ 0 .. readyCanon.Objective.Count - 1 ] do
-          if basis |> Array.contains i then
-            var_dict.[readyCanon.VariableNames.[i]] <- x_B.[basic_count]
-            basic_count <- basic_count + 1
-          else
+          match basis |> Array.tryFindIndex ((=) i) with
+          | Some basis_index ->
+            var_dict.[readyCanon.VariableNames.[i]] <- x_B.[basis_index]
+          | None ->
             var_dict.[readyCanon.VariableNames.[i]] <- 0.0
+
         let objective_value = (basis |> Array.map (fun x -> canon.Objective.[x]) |> Vector.Build.Dense).DotProduct x_B
         {
           canon= canon
