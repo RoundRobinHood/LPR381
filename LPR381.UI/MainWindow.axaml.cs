@@ -46,7 +46,16 @@ public partial class MainWindow : Window
         _varTypeCombo = this.FindControl<ComboBox>("VariableTypeCombo");
         _solverInfoText = this.FindControl<TextBlock>("SolverInfoText");
         
-
+        // Populate algorithm combo from registry
+        if (_algoCombo != null)
+        {
+            _algoCombo.Items.Clear();
+            foreach (var entry in SolverRegistry.Available)
+            {
+                _algoCombo.Items.Add(new ComboBoxItem { Content = entry.Display, Tag = entry.Key });
+            }
+            _algoCombo.SelectedIndex = 0;
+        }
     }
 
     private async void SubmitButton_Click(object? sender, RoutedEventArgs e) => await Solve();
@@ -73,12 +82,10 @@ public partial class MainWindow : Window
 
             var runner = CreateRunnerFromCombo(_algoCombo);
             
-            // Validate solver compatibility
-            var tempModel = new LPFormulationBuilder().Build(input);
-            var validationError = SolverValidator.ValidateSolver(runner.Key, tempModel);
-            if (!string.IsNullOrEmpty(validationError))
+            // Quick validation without building full model
+            if (runner.Key == "knapsack" && (input.Constraints?.Length != 1))
             {
-                if (_outputBox != null) _outputBox.Text = $"Solver Error: {validationError}";
+                if (_outputBox != null) _outputBox.Text = "Knapsack requires exactly one constraint";
                 return;
             }
 
@@ -105,60 +112,11 @@ public partial class MainWindow : Window
 
     private static ISolverRunner CreateRunnerFromCombo(ComboBox combo)
     {
-        // 1) If the item is already a registry entry
-        if (combo.SelectedItem is SolverRegistry.Entry entry)
-            return entry.Factory();
-
-        // 2) If XAML uses ComboBoxItem with Tag or Content
-        if (combo.SelectedItem is ComboBoxItem cbi)
-        {
-            var key = cbi.Tag?.ToString()?.Trim().ToLowerInvariant();
-            if (string.IsNullOrWhiteSpace(key))
-            {
-                var text = cbi.Content?.ToString()?.Trim().ToLowerInvariant() ?? "";
-                key = MapDisplayToKey(text);
-            }
-            return CreateRunnerByKey(key);
-        }
-
-        // 3) If SelectedValue is set
-        var sv = combo.SelectedValue?.ToString()?.Trim().ToLowerInvariant();
-        if (!string.IsNullOrWhiteSpace(sv)) return CreateRunnerByKey(sv);
-
-        // 4) If items are bound as strings
-        if (combo.SelectedItem is string s)
-        {
-            var key = MapDisplayToKey(s.Trim().ToLowerInvariant());
-            return CreateRunnerByKey(key);
-        }
-
-        throw new InvalidOperationException("Please select a solver.");
-    }
-
-    private static string MapDisplayToKey(string s)
-    {
-        if (string.IsNullOrWhiteSpace(s)) return "";
-        if (s.Contains("primal")) return "primal-simplex";
-        if (s.Contains("revised")) return "revised-simplex";
-        if (s.Contains("branch") && s.Contains("bound")) return "branch-and-bound";
-        if(s.Contains("cutting") && s.Contains("plane")) return "cutting-plane";
-        if(s.Contains("knapsack")) return "knapsack";
-        return s;
-    }
-
-    private static ISolverRunner CreateRunnerByKey(string? key)
-    {
-        key = (key ?? "").Trim().ToLowerInvariant();
-        return key switch
-        {
-            "primal-simplex" => new PrimalSimplexRunner(),
-            "revised-simplex" => new RevisedSimplexRunner(),
-            "branch-and-bound" or "branch and bound" or "branch&bound" or
-        "bnb" or "b&b" or "branch" => new BranchAndBoundRunner(),
-         "cutting-plane" => new CuttingPlaneRunner(),
-            "knapsack" => new KnapsackRunner(),
-            _ => throw new InvalidOperationException($"Unknown solver key '{key}'.")
-        };
+        var selectedIndex = combo.SelectedIndex;
+        if (selectedIndex < 0 || selectedIndex >= SolverRegistry.Available.Count)
+            throw new InvalidOperationException("Please select a solver.");
+        
+        return SolverRegistry.Available[selectedIndex].Factory();
     }
 
     private static string[] ReadConstraintLines(StackPanel panel)
