@@ -13,6 +13,7 @@ using LPR381.UI.Solvers;
 using Avalonia.Controls.Templates;
 using LPR381.UI.Models;
 using LPR381.UI.Util;
+using LPR381.UI.Core;
 using System.Threading.Tasks;
 using System.IO;
 
@@ -25,6 +26,8 @@ public partial class MainWindow : Window
     private TextBox? _objBox;
     private StackPanel? _panel;
     private ComboBox? _algoCombo;
+    private ComboBox? _varTypeCombo;
+    private TextBlock? _solverInfoText;
 
     public MainWindow()
     {
@@ -39,6 +42,10 @@ public partial class MainWindow : Window
         _objBox = this.FindControl<TextBox>("ObjectiveTextBox");
         _panel = this.FindControl<StackPanel>("ConstraintsPanel");
         _algoCombo = this.FindControl<ComboBox>("AlgorithmCombo");
+        _varTypeCombo = this.FindControl<ComboBox>("VariableTypeCombo");
+        _solverInfoText = this.FindControl<TextBlock>("SolverInfoText");
+        
+
     }
 
     private async void SubmitButton_Click(object? sender, RoutedEventArgs e) => await Solve();
@@ -59,10 +66,20 @@ public partial class MainWindow : Window
             var input = new UserProblem
             {
                 ObjectiveLine = _objBox.Text ?? "",
-                Constraints = ReadConstraintLines(_panel)
+                Constraints = ReadConstraintLines(_panel),
+                IntMode = GetVariableType()
             };
 
             var runner = CreateRunnerFromCombo(_algoCombo);
+            
+            // Validate solver compatibility
+            var tempModel = new LPFormulationBuilder().Build(input);
+            var validationError = SolverValidator.ValidateSolver(runner.Key, tempModel);
+            if (!string.IsNullOrEmpty(validationError))
+            {
+                if (_outputBox != null) _outputBox.Text = $"Solver Error: {validationError}";
+                return;
+            }
 
             // Run
             var summary = await runner.RunAsync(input);
@@ -167,6 +184,15 @@ public partial class MainWindow : Window
             .ToArray();
 
         return lines;
+    }
+    
+
+    
+    private string GetVariableType()
+    {
+        if (_varTypeCombo?.SelectedItem is ComboBoxItem item)
+            return item.Tag?.ToString() ?? "continuous";
+        return "continuous";
     }
 
 

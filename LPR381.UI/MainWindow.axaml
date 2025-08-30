@@ -93,15 +93,16 @@
 											<TextBox x:Name="ObjectiveTextBox" Width="400" Watermark="e.g. 3x1 + 2x2 + 5x3" Margin="10,0"/>
 										</StackPanel>
 
-										<!-- Variable Sign restriction -->
-										<TextBlock Text="Sign restrictions" FontWeight="Bold" Margin="0,10,0,5"/>
-										<ComboBox  Width="200" Margin="0,3" >
-											<ComboBoxItem Content="+"/>
-											<ComboBoxItem Content="-" />
-											<ComboBoxItem Content="Urs" />
-											<ComboBoxItem Content="Bin" />
-											<ComboBoxItem Content="Int" />
+										<!-- Variable Type restriction -->
+										<TextBlock Text="Variable Type" FontWeight="Bold" Margin="0,10,0,5"/>
+										<ComboBox x:Name="VariableTypeCombo" Width="200" Margin="0,3" SelectedIndex="0">
+											<ComboBoxItem Content="Continuous" Tag="continuous"/>
+											<ComboBoxItem Content="Integer" Tag="integer"/>
+											<ComboBoxItem Content="Binary" Tag="binary"/>
 										</ComboBox>
+										
+										<!-- Solver Compatibility Info -->
+										<TextBlock x:Name="SolverInfoText" Text="" Foreground="Orange" FontSize="12" Margin="0,5" TextWrapping="Wrap"/>
 
 										<!-- Constraints -->
 										<TextBlock Text="Constraints" FontWeight="Bold" Margin="0,10,0,5"/>

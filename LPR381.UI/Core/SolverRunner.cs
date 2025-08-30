@@ -23,7 +23,22 @@ namespace LPR381.UI.Core
         protected virtual LPFormulation BuildFormulation(UserProblem input)
         {
             var builder = new LPFormulationBuilder();
-            return builder.Build(input);
+            var model = builder.Build(input);
+            
+            // Apply variable type restrictions
+            var intRestrictions = new IntRestriction[model.VarNames.Length];
+            var restriction = input.IntMode switch
+            {
+                "integer" => IntRestriction.Integer,
+                "binary" => IntRestriction.Binary,
+                _ => IntRestriction.Unrestricted
+            };
+            System.Array.Fill(intRestrictions, restriction);
+            
+            return new LPFormulation(
+                model.ObjectiveType, model.VarNames, model.Objective,
+                model.ConstraintCoefficients, model.ConstraintSigns, model.RHS,
+                model.VarSignRestrictions, intRestrictions);
         }
 
         protected void AddCanonicalForm(LPFormulation model)
