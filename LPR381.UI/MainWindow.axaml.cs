@@ -14,6 +14,7 @@ using Avalonia.Controls.Templates;
 using LPR381.UI.Models;
 using LPR381.UI.Util;
 using System.Threading.Tasks;
+using System.IO;
 
 namespace LPR381.UI;
 
@@ -227,6 +228,24 @@ public partial class MainWindow : Window
 
         // Add row to panel
         ConstraintsPanel.Children.Add(row);
+    }
+    private async void UploadFileButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog();
+        dialog.AllowMultiple = false;
+        dialog.Filters.Add(new FileDialogFilter() { Name = "Text Files", Extensions = { "txt" } });
+
+        var result = await dialog.ShowAsync(this);
+
+        if (result != null && result.Length > 0)
+        {
+            string filePath = result[0];
+            string fileContent = File.ReadAllText(filePath);
+
+        
+            FileContentTextBox.Text = fileContent;
+        }
+
     }
 }
 //// --- New lightweight parser for linear expressions like "3x1 - 2x2 + x3" (no LPObjective/LPConstraint) ---
