@@ -11,7 +11,7 @@ namespace LPR381.UI.Solvers
         public override string Key => "knapsack";
         public override string Display => "Knapsack";
 
-        protected override LPFormulation BuildFormulation(UserProblem input)
+        public override LPFormulation BuildFormulation(UserProblem input)
         {
             var baseModel = base.BuildFormulation(input);
             var intRestrictions = new IntRestriction[baseModel.VarNames.Length];

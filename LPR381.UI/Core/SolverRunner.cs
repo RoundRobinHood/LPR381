@@ -26,7 +26,7 @@ namespace LPR381.UI.Core
         
         protected abstract SolveSummary Solve(LPFormulation model);
         
-        protected virtual LPFormulation BuildFormulation(UserProblem input)
+        public virtual LPFormulation BuildFormulation(UserProblem input)
         {
             if (input?.ObjectiveLine == null) 
                 throw new ArgumentException("Objective is required");
@@ -39,22 +39,43 @@ namespace LPR381.UI.Core
                 throw new FormatException($"Invalid objective: {objErr}");
 
             var constraints = ParseConstraints(input.Constraints ?? System.Array.Empty<string>());
-            var model = new LPFormulation(obj, constraints);
+            var baseModel = new LPFormulation(obj, constraints);
+            
+            // Apply variable sign restrictions
+            var signRestrictions = new SignRestriction[baseModel.VarNames.Length];
+            for (int i = 0; i < baseModel.VarNames.Length; i++)
+            {
+                var varName = baseModel.VarNames[i];
+                signRestrictions[i] = input.VariableSignRestrictions?.ContainsKey(varName) == true
+                    ? input.VariableSignRestrictions[varName]
+                    : SignRestriction.Positive; // Default to positive
+            }
             
             // Apply variable type restrictions
-            var intRestrictions = new IntRestriction[model.VarNames.Length];
-            var restriction = input.IntMode switch
+            var intRestrictions = new IntRestriction[baseModel.VarNames.Length];
+            for (int i = 0; i < baseModel.VarNames.Length; i++)
             {
-                "integer" => IntRestriction.Integer,
-                "binary" => IntRestriction.Binary,
-                _ => IntRestriction.Unrestricted
-            };
-            System.Array.Fill(intRestrictions, restriction);
+                var varName = baseModel.VarNames[i];
+                if (input.VariableIntRestrictions?.ContainsKey(varName) == true)
+                {
+                    intRestrictions[i] = input.VariableIntRestrictions[varName];
+                }
+                else
+                {
+                    // Fallback to global IntMode if individual restriction not specified
+                    intRestrictions[i] = input.IntMode switch
+                    {
+                        "integer" => IntRestriction.Integer,
+                        "binary" => IntRestriction.Binary,
+                        _ => IntRestriction.Unrestricted
+                    };
+                }
+            }
             
             return new LPFormulation(
-                model.ObjectiveType, model.VarNames, model.Objective,
-                model.ConstraintCoefficients, model.ConstraintSigns, model.RHS,
-                model.VarSignRestrictions, intRestrictions);
+                baseModel.ObjectiveType, baseModel.VarNames, baseModel.Objective,
+                baseModel.ConstraintCoefficients, baseModel.ConstraintSigns, baseModel.RHS,
+                signRestrictions, intRestrictions);
         }
 
         private static (ObjectiveType type, string expr) ParseObjective(string line)

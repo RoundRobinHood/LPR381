@@ -16,118 +16,137 @@ using LPR381.UI.Util;
 using LPR381.UI.Core;
 using System.Threading.Tasks;
 using System.IO;
+using Avalonia.Media;
 
 namespace LPR381.UI;
 
 public partial class MainWindow : Window
 {
-    private TextBox? _outputBox;
     private TextBox? _iterationsBox;
     private TextBox? _objBox;
     private StackPanel? _panel;
-    private ComboBox? _algoCombo;
-    private ComboBox? _varTypeCombo;
-    private TextBlock? _solverInfoText;
     private ISolverRunner? _lastRunner;
+    private readonly List<RadioButton> _algorithmRadios = new();
 
     public MainWindow()
     {
         InitializeComponent();
         CacheControls();
+        SetupAlgorithmRadioButtons();
     }
 
     private void CacheControls()
     {
-        _outputBox = this.FindControl<TextBox>("OutputBox");
         _iterationsBox = this.FindControl<TextBox>("IterationsBox");
         _objBox = this.FindControl<TextBox>("ObjectiveTextBox");
         _panel = this.FindControl<StackPanel>("ConstraintsPanel");
-        _algoCombo = this.FindControl<ComboBox>("AlgorithmCombo");
-        _varTypeCombo = this.FindControl<ComboBox>("VariableTypeCombo");
-        _solverInfoText = this.FindControl<TextBlock>("SolverInfoText");
-        
-        // Populate algorithm combos from registry
-        if (_algoCombo != null)
+    }
+
+    private void SetupAlgorithmRadioButtons()
+    {
+        var radioPanel = this.FindControl<StackPanel>("AlgorithmRadioPanel");
+        if (radioPanel == null) return;
+
+        foreach (var entry in SolverRegistry.Available)
         {
-            _algoCombo.Items.Clear();
-            foreach (var entry in SolverRegistry.Available)
+            var radio = new RadioButton
             {
-                _algoCombo.Items.Add(new ComboBoxItem { Content = entry.Display, Tag = entry.Key });
-            }
-            _algoCombo.SelectedIndex = 0;
+                Content = entry.Display,
+                Tag = entry.Key,
+                GroupName = "Algorithm",
+                Margin = new Thickness(0, 2)
+            };
+            _algorithmRadios.Add(radio);
+            radioPanel.Children.Add(radio);
         }
         
-        var fileAlgoCombo = this.FindControl<ComboBox>("FileAlgorithmCombo");
-        if (fileAlgoCombo != null)
-        {
-            fileAlgoCombo.Items.Clear();
-            foreach (var entry in SolverRegistry.Available)
-            {
-                fileAlgoCombo.Items.Add(new ComboBoxItem { Content = entry.Display, Tag = entry.Key });
-            }
-            fileAlgoCombo.SelectedIndex = 0;
-        }
+        if (_algorithmRadios.Count > 0)
+            _algorithmRadios[0].IsChecked = true;
     }
 
     private async void SubmitButton_Click(object? sender, RoutedEventArgs e) => await Solve();
 
     private async Task Solve()
     {
-        if (_outputBox != null) _outputBox.Text = "";
+        var summaryBox = this.FindControl<TextBox>("SolutionSummaryBox");
+        var sensitivityBox = this.FindControl<TextBox>("SensitivityBox");
         if (_iterationsBox != null) _iterationsBox.Text = "";
+        if (summaryBox != null) summaryBox.Text = "";
+        if (sensitivityBox != null) sensitivityBox.Text = "";
 
         try
         {
-            if (_objBox == null || _panel == null || _algoCombo == null)
-            {
-                if (_outputBox != null) _outputBox.Text = "UI not ready.";
-                return;
-            }
-
-            var input = new UserProblem
-            {
-                ObjectiveLine = _objBox.Text ?? "",
-                Constraints = ReadConstraintLines(_panel),
-                IntMode = GetVariableType()
-            };
-
-            var runner = CreateRunnerFromCombo(_algoCombo);
+            var input = GetUserInput();
+            var runner = GetSelectedRunner();
             
-            // Quick validation without building full model
+            // Quick validation
             if (runner.Key == "knapsack" && (input.Constraints?.Length != 1))
             {
-                if (_outputBox != null) _outputBox.Text = "Knapsack requires exactly one constraint";
+                if (summaryBox != null) summaryBox.Text = "Knapsack requires exactly one constraint";
                 return;
             }
 
-            // Run
+            // Run solver
             var summary = await runner.RunAsync(input);
             _lastRunner = runner;
 
+            // Update iterations
             if (_iterationsBox != null)
                 _iterationsBox.Text = string.Join("\n\n", runner.Iterations.Select(IterationFormat.Pretty));
 
-            if (_outputBox != null)
+            // Update summary
+            if (summaryBox != null)
             {
-                _outputBox.Text = $"{summary.Message}\nObjective = {summary.Objective}\n" +
+                summaryBox.Text = $"{summary.Message}\nObjective = {summary.Objective}\n" +
                     string.Join("\n", summary.VariableValues.Select(kv => $"{kv.Key} = {kv.Value}"));
+            }
+
+            // TODO: Add sensitivity analysis
+            if (sensitivityBox != null)
+            {
+                sensitivityBox.Text = "Sensitivity analysis will be available here.";
+            }
+
+            // Switch to results tab
+            var resultsTab = this.FindControl<TabItem>("ResultsTab");
+            if (resultsTab?.Parent is TabControl mainTabControl)
+            {
+                mainTabControl.SelectedItem = resultsTab;
             }
         }
         catch (Exception ex)
         {
-            if (_outputBox != null) _outputBox.Text = "Error: " + ex.Message;
+            if (summaryBox != null) summaryBox.Text = "Error: " + ex.Message;
         }
     }
 
     // ===== Helpers =====
 
-    private static ISolverRunner CreateRunnerFromCombo(ComboBox combo)
+    private UserProblem GetUserInput()
     {
-        var selectedIndex = combo.SelectedIndex;
-        if (selectedIndex < 0 || selectedIndex >= SolverRegistry.Available.Count)
-            throw new InvalidOperationException("Please select a solver.");
+        if (_objBox == null || _panel == null)
+            throw new InvalidOperationException("UI not ready.");
+
+        var (signRestrictions, intRestrictions) = GetVariableRestrictions();
         
-        return SolverRegistry.Available[selectedIndex].Factory();
+        return new UserProblem
+        {
+            ObjectiveLine = _objBox.Text ?? "",
+            Constraints = ReadConstraintLines(_panel),
+            IntMode = "continuous", // Default since we use individual restrictions now
+            VariableSignRestrictions = signRestrictions,
+            VariableIntRestrictions = intRestrictions
+        };
+    }
+
+    private ISolverRunner GetSelectedRunner()
+    {
+        var selectedRadio = _algorithmRadios.FirstOrDefault(r => r.IsChecked == true);
+        if (selectedRadio?.Tag is not string key)
+            throw new InvalidOperationException("Please select a solver.");
+
+        var entry = SolverRegistry.Available.FirstOrDefault(e => e.Key == key);
+        return entry?.Factory() ?? throw new InvalidOperationException("Invalid solver selection.");
     }
 
     private static string[] ReadConstraintLines(StackPanel panel)
@@ -159,74 +178,193 @@ public partial class MainWindow : Window
     
 
     
-    private string GetVariableType()
+    private void ClearButton_Click(object? sender, RoutedEventArgs e)
     {
-        if (_varTypeCombo?.SelectedItem is ComboBoxItem item)
-            return item.Tag?.ToString() ?? "continuous";
-        return "continuous";
+        ClearAllInputs();
+    }
+
+    private void ClearAllInputs()
+    {
+        // Clear objective
+        if (_objBox != null) _objBox.Text = "";
+        
+        // Reset objective type to Max
+        var objTypeCombo = this.FindControl<ComboBox>("ObjectiveTypeCombo");
+        if (objTypeCombo != null) objTypeCombo.SelectedIndex = 0;
+        
+        // Clear all constraints except the first one
+        if (_panel != null)
+        {
+            _panel.Children.Clear();
+            AddConstraintRow(); // Add one empty constraint row
+        }
+        
+        // Clear variable restrictions
+        var restrictionsPanel = this.FindControl<StackPanel>("VariableRestrictionsPanel");
+        if (restrictionsPanel != null) restrictionsPanel.Children.Clear();
+        
+        // Clear canonical preview
+        var previewBox = this.FindControl<TextBox>("CanonicalPreviewBox");
+        if (previewBox != null) previewBox.Text = "";
+        
+        // Clear file status
+        var fileStatusText = this.FindControl<TextBlock>("FileStatusText");
+        if (fileStatusText != null) fileStatusText.Text = "";
+        
+        // Reset algorithm selection to first option
+        if (_algorithmRadios.Count > 0)
+            _algorithmRadios[0].IsChecked = true;
+    }
+
+    private (Dictionary<string, SignRestriction>, Dictionary<string, IntRestriction>) GetVariableRestrictions()
+    {
+        var signRestrictions = new Dictionary<string, SignRestriction>();
+        var intRestrictions = new Dictionary<string, IntRestriction>();
+        var restrictionsPanel = this.FindControl<StackPanel>("VariableRestrictionsPanel");
+        
+        if (restrictionsPanel != null)
+        {
+            foreach (var child in restrictionsPanel.Children)
+            {
+                if (child is StackPanel row && row.Children.Count >= 2)
+                {
+                    if (row.Children[1] is ComboBox combo && combo.Tag is string variableName)
+                    {
+                        var selectedTag = (combo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "+";
+                        
+                        (signRestrictions[variableName], intRestrictions[variableName]) = selectedTag switch
+                        {
+                            "+" => (SignRestriction.Positive, IntRestriction.Unrestricted),
+                            "-" => (SignRestriction.Negative, IntRestriction.Unrestricted),
+                            "urs" => (SignRestriction.Unrestricted, IntRestriction.Unrestricted),
+                            "int" => (SignRestriction.Positive, IntRestriction.Integer),
+                            "bin" => (SignRestriction.Positive, IntRestriction.Binary),
+                            _ => (SignRestriction.Positive, IntRestriction.Unrestricted)
+                        };
+                    }
+                }
+            }
+        }
+        
+        return (signRestrictions, intRestrictions);
     }
 
 
 
     private void AddConstraintButton_Click(object sender, RoutedEventArgs e)
     {
-        // Create a new row
-        var row = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Margin = new Thickness(0, 5, 0, 0)
-        };
+        AddConstraintRow();
+    }
 
-        // Coefficients textbox
-        var coeffBox = new TextBox
-        {
-            Width = 250,
-            Watermark = "Coefficients e.g. 2x1 + 3x2"
-        };
+    private void UpdateVariablesButton_Click(object? sender, RoutedEventArgs e)
+    {
+        UpdateVariableRestrictions();
+    }
 
-        // Operator dropdown
-        var combo = new ComboBox
+    private void UpdateVariableRestrictions()
+    {
+        var restrictionsPanel = this.FindControl<StackPanel>("VariableRestrictionsPanel");
+        if (restrictionsPanel == null || _objBox == null) return;
+
+        restrictionsPanel.Children.Clear();
+
+        try
         {
-            Width = 70,
-            Margin = new Thickness(5, 0, 0, 0),
-            Items =
+            var variables = ExtractVariablesFromObjective(_objBox.Text ?? "");
+            
+            foreach (var variable in variables)
             {
-                new ComboBoxItem { Content = "<=" },
-                new ComboBoxItem { Content = ">=" },
-                new ComboBoxItem { Content = "=" }
+                var row = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Margin = new Thickness(0, 2)
+                };
+
+                var label = new TextBlock
+                {
+                    Text = $"{variable}:",
+                    Width = 60,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+
+                var combo = new ComboBox
+                {
+                    Width = 120,
+                    Margin = new Thickness(5, 0),
+                    Tag = variable,
+                    Items =
+                    {
+                        new ComboBoxItem { Content = "+", Tag = "+" },
+                        new ComboBoxItem { Content = "-", Tag = "-" },
+                        new ComboBoxItem { Content = "urs", Tag = "urs" },
+                        new ComboBoxItem { Content = "int", Tag = "int" },
+                        new ComboBoxItem { Content = "bin", Tag = "bin" }
+                    },
+                    SelectedIndex = 0 // Default to +
+                };
+
+                row.Children.Add(label);
+                row.Children.Add(combo);
+                restrictionsPanel.Children.Add(row);
             }
-        };
-
-        // RHS textbox
-        var rhsBox = new TextBox
+        }
+        catch (Exception ex)
         {
-            Width = 80,
-            Watermark = "RHS",
-            Margin = new Thickness(5, 0, 0, 0),
-        };
-        // Delete button
-        var deleteBtn = new Button
+            var errorText = new TextBlock
+            {
+                Text = $"Error parsing variables: {ex.Message}",
+                Foreground = new SolidColorBrush(Colors.Red)
+            };
+            restrictionsPanel.Children.Add(errorText);
+        }
+    }
+
+    private static List<string> ExtractVariablesFromObjective(string objective)
+    {
+        var variables = new HashSet<string>();
+        if (string.IsNullOrWhiteSpace(objective)) return new List<string>();
+
+        // Remove "max" or "min" prefix if present
+        var cleanObjective = objective.Trim();
+        if (cleanObjective.StartsWith("max", StringComparison.OrdinalIgnoreCase) ||
+            cleanObjective.StartsWith("min", StringComparison.OrdinalIgnoreCase))
         {
-            Content = "Delete",    // small cross
-            Width = 110,
-            Height = 30,
-            Margin = new Thickness(5, 0, 0, 0)
-        };
+            cleanObjective = cleanObjective.Substring(3).Trim();
+        }
 
-        // delete functionality
-        deleteBtn.Click += (s, args) =>
+        // Simple regex-like parsing to extract variable names
+        var terms = cleanObjective.Split(new[] { '+', '-' }, StringSplitOptions.RemoveEmptyEntries);
+        
+        foreach (var term in terms)
         {
-            ConstraintsPanel.Children.Remove(row);
-        };
+            var cleanTerm = term.Trim();
+            if (string.IsNullOrEmpty(cleanTerm)) continue;
 
-        // Add them to row
-        row.Children.Add(coeffBox);
-        row.Children.Add(combo);
-        row.Children.Add(rhsBox);
-        row.Children.Add(deleteBtn);
+            // Extract variable name (letters and digits after any coefficient)
+            var variablePart = "";
+            bool foundVariable = false;
+            
+            for (int i = 0; i < cleanTerm.Length; i++)
+            {
+                char c = cleanTerm[i];
+                if (char.IsLetter(c) || (foundVariable && char.IsDigit(c)))
+                {
+                    foundVariable = true;
+                    variablePart += c;
+                }
+                else if (foundVariable)
+                {
+                    break;
+                }
+            }
 
-        // Add row to panel
-        ConstraintsPanel.Children.Add(row);
+            if (!string.IsNullOrEmpty(variablePart))
+            {
+                variables.Add(variablePart);
+            }
+        }
+
+        return variables.OrderBy(v => v).ToList();
     }
     private async void UploadFileButton_Click(object sender, RoutedEventArgs e)
     {
@@ -238,65 +376,216 @@ public partial class MainWindow : Window
 
         if (result != null && result.Length > 0)
         {
-            string filePath = result[0];
-            string fileContent = File.ReadAllText(filePath);
-            FileContentTextBox.Text = fileContent;
+            try
+            {
+                string filePath = result[0];
+                string fileContent = File.ReadAllText(filePath);
+                
+                // Parse file using F# InputFile module
+                LPFormulation formulation = default!;
+                string error = "";
+                if (!InputFile.TryInterpretText(fileContent, ref formulation, ref error))
+                {
+                    var statusText = this.FindControl<TextBlock>("FileStatusText");
+                    if (statusText != null)
+                    {
+                        statusText.Text = $"Error: {error}";
+                        statusText.Foreground = new SolidColorBrush(Colors.Red);
+                    }
+                    return;
+                }
+                
+                // Populate UI fields from formulation
+                PopulateFromFormulation(formulation);
+                
+                // Show success status
+                var fileStatusText = this.FindControl<TextBlock>("FileStatusText");
+                if (fileStatusText != null)
+                {
+                    fileStatusText.Text = "✓ File loaded successfully";
+                    fileStatusText.Foreground = new SolidColorBrush(Colors.Green);
+                }
+            }
+            catch (Exception ex)
+            {
+                var statusText = this.FindControl<TextBlock>("FileStatusText");
+                if (statusText != null)
+                {
+                    statusText.Text = $"Error: {ex.Message}";
+                    statusText.Foreground = new SolidColorBrush(Colors.Red);
+                }
+            }
         }
     }
     
-    private async void FileSubmitButton_Click(object sender, RoutedEventArgs e)
+    private void PopulateFromFormulation(LPFormulation formulation)
     {
-        if (_outputBox != null) _outputBox.Text = "";
-        if (_iterationsBox != null) _iterationsBox.Text = "";
+        // Set objective type
+        var objTypeCombo = this.FindControl<ComboBox>("ObjectiveTypeCombo");
+        if (objTypeCombo != null)
+        {
+            objTypeCombo.SelectedIndex = formulation.ObjectiveType == ObjectiveType.Max ? 0 : 1;
+        }
         
+        // Set objective function
+        if (_objBox != null)
+        {
+            var objTerms = formulation.VarNames.Zip(formulation.Objective, (name, coeff) => $"{coeff:+0.###;-0.###}{name}");
+            _objBox.Text = string.Join(" ", objTerms);
+        }
+        
+        // Variable type is now handled individually per variable
+        
+        // Clear existing constraints and add new ones
+        if (_panel != null)
+        {
+            _panel.Children.Clear();
+            
+            for (int i = 0; i < formulation.ConstraintSigns.Length; i++)
+            {
+                var terms = new List<string>();
+                for (int j = 0; j < formulation.VarNames.Length; j++)
+                {
+                    var coeff = formulation.ConstraintCoefficients[i, j];
+                    if (Math.Abs(coeff) > 1e-9)
+                        terms.Add($"{coeff:+0.###;-0.###}{formulation.VarNames[j]}");
+                }
+                var sign = formulation.ConstraintSigns[i] switch
+                {
+                    ConstraintSign.LessOrEqual => "<=",
+                    ConstraintSign.GreaterOrEqual => ">=",
+                    _ => "="
+                };
+                
+                AddConstraintRow(string.Join(" ", terms), sign, formulation.RHS[i].ToString());
+            }
+        }
+        
+        // Update variable restrictions based on formulation
+        UpdateVariableRestrictions();
+        
+        // Set the sign restrictions from the formulation
+        var restrictionsPanel = this.FindControl<StackPanel>("VariableRestrictionsPanel");
+        if (restrictionsPanel != null)
+        {
+            for (int i = 0; i < Math.Min(formulation.VarNames.Length, formulation.VarSignRestrictions.Length); i++)
+            {
+                var varName = formulation.VarNames[i];
+                var restriction = formulation.VarSignRestrictions[i];
+                
+                // Find the combo box for this variable
+                foreach (var child in restrictionsPanel.Children)
+                {
+                    if (child is StackPanel row && row.Children.Count >= 2)
+                    {
+                        if (row.Children[1] is ComboBox combo && combo.Tag?.ToString() == varName)
+                        {
+                            var intRestriction = i < formulation.VarIntRestrictions.Length ? formulation.VarIntRestrictions[i] : IntRestriction.Unrestricted;
+                            
+                            combo.SelectedIndex = (restriction, intRestriction) switch
+                            {
+                                (SignRestriction.Negative, IntRestriction.Unrestricted) => 1, // -
+                                (SignRestriction.Unrestricted, IntRestriction.Unrestricted) => 2, // urs
+                                (SignRestriction.Positive, IntRestriction.Integer) => 3, // int
+                                (SignRestriction.Positive, IntRestriction.Binary) => 4, // bin
+                                _ => 0 // + (positive)
+                            };
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    private void AddConstraintRow(string lhs = "", string sign = "<=", string rhs = "")
+    {
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Margin = new Thickness(0, 5, 0, 0)
+        };
+
+        var coeffBox = new TextBox
+        {
+            Width = 250,
+            Watermark = "Coefficients e.g. 2x1 + 3x2",
+            Text = lhs
+        };
+
+        var combo = new ComboBox
+        {
+            Width = 70,
+            Margin = new Thickness(5, 0, 0, 0),
+            Items =
+            {
+                new ComboBoxItem { Content = "<=" },
+                new ComboBoxItem { Content = ">=" },
+                new ComboBoxItem { Content = "=" }
+            }
+        };
+        combo.SelectedIndex = sign switch { ">=" => 1, "=" => 2, _ => 0 };
+
+        var rhsBox = new TextBox
+        {
+            Width = 80,
+            Watermark = "RHS",
+            Margin = new Thickness(5, 0, 0, 0),
+            Text = rhs
+        };
+        
+        var deleteBtn = new Button
+        {
+            Content = "✕",
+            Width = 30,
+            Height = 30,
+            Margin = new Thickness(5, 0, 0, 0),
+            FontSize = 14,
+            FontWeight = FontWeight.Bold
+        };
+
+        deleteBtn.Click += (s, args) => _panel?.Children.Remove(row);
+
+        row.Children.Add(coeffBox);
+        row.Children.Add(combo);
+        row.Children.Add(rhsBox);
+        row.Children.Add(deleteBtn);
+
+        _panel?.Children.Add(row);
+    }
+
+    private void ViewIterationsButton_Click(object? sender, RoutedEventArgs e)
+    {
+        var iterationsSubTab = this.FindControl<TabItem>("IterationsSubTab");
+        if (iterationsSubTab?.Parent is TabControl resultsTabControl)
+        {
+            resultsTabControl.SelectedItem = iterationsSubTab;
+        }
+    }
+
+    private async void PreviewCanonicalButton_Click(object? sender, RoutedEventArgs e)
+    {
+        var previewBox = this.FindControl<TextBox>("CanonicalPreviewBox");
+        if (previewBox == null) return;
+
         try
         {
-            var fileContent = FileContentTextBox?.Text;
-            if (string.IsNullOrWhiteSpace(fileContent))
-            {
-                if (_outputBox != null) _outputBox.Text = "Please load a file first.";
-                return;
-            }
+            var input = GetUserInput();
+            var tempRunner = new PrimalSimplexRunner(); // Use any runner to build formulation
+            var formulation = ((SolverRunner)tempRunner).BuildFormulation(input);
+            var canonical = formulation.ToLPCanonical();
             
-            // Parse file using F# InputFile module
-            LPFormulation formulation = default!;
-            string error = "";
-            if (!InputFile.TryInterpretText(fileContent, ref formulation, ref error))
-            {
-                if (_outputBox != null) _outputBox.Text = $"File parsing error: {error}";
-                return;
-            }
+            var preview = $"Objective: {canonical.ObjectiveType}\n";
+            preview += $"Variables: {string.Join(", ", canonical.VariableNames)}\n";
+            preview += $"Objective coeffs: [{string.Join(", ", canonical.Objective.ToArray().Select(x => x.ToString("F2")))}]\n";
+            preview += $"Constraints: {canonical.ConstraintMatrix.RowCount} x {canonical.ConstraintMatrix.ColumnCount}\n";
+            preview += $"RHS: [{string.Join(", ", canonical.RHS.ToArray().Select(x => x.ToString("F2")))}]";
             
-            // Convert to UserProblem format
-            var input = ConvertToUserProblem(formulation);
-            
-            // Get selected algorithm from file input tab
-            var fileAlgoCombo = this.FindControl<ComboBox>("FileAlgorithmCombo");
-            var runner = CreateRunnerFromCombo(fileAlgoCombo ?? _algoCombo!);
-            
-            // Quick validation
-            if (runner.Key == "knapsack" && formulation.ConstraintSigns.Length != 1)
-            {
-                if (_outputBox != null) _outputBox.Text = "Knapsack requires exactly one constraint";
-                return;
-            }
-            
-            // Run solver
-            var summary = await runner.RunAsync(input);
-            _lastRunner = runner;
-            
-            if (_iterationsBox != null)
-                _iterationsBox.Text = string.Join("\n\n", runner.Iterations.Select(IterationFormat.Pretty));
-            
-            if (_outputBox != null)
-            {
-                _outputBox.Text = $"{summary.Message}\nObjective = {summary.Objective}\n" +
-                    string.Join("\n", summary.VariableValues.Select(kv => $"{kv.Key} = {kv.Value}"));
-            }
+            previewBox.Text = preview;
         }
         catch (Exception ex)
         {
-            if (_outputBox != null) _outputBox.Text = "Error: " + ex.Message;
+            previewBox.Text = $"Error: {ex.Message}";
         }
     }
     
@@ -346,7 +635,8 @@ public partial class MainWindow : Window
     {
         if (_lastRunner?.Iterations.Count == 0)
         {
-            if (_outputBox != null) _outputBox.Text = "No results to export. Please solve a problem first.";
+            var summaryBox = this.FindControl<TextBox>("SolutionSummaryBox");
+            if (summaryBox != null) summaryBox.Text = "No results to export. Please solve a problem first.";
             return;
         }
 
@@ -360,11 +650,13 @@ public partial class MainWindow : Window
             try
             {
                 _lastRunner.ExportToFile(result);
-                if (_outputBox != null) _outputBox.Text += $"\n\nResults exported to: {result}";
+                var summaryBox = this.FindControl<TextBox>("SolutionSummaryBox");
+                if (summaryBox != null) summaryBox.Text += $"\n\nResults exported to: {result}";
             }
             catch (Exception ex)
             {
-                if (_outputBox != null) _outputBox.Text += $"\n\nExport failed: {ex.Message}";
+                var summaryBox = this.FindControl<TextBox>("SolutionSummaryBox");
+                if (summaryBox != null) summaryBox.Text += $"\n\nExport failed: {ex.Message}";
             }
         }
     }

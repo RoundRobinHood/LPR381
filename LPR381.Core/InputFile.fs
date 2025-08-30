@@ -33,17 +33,28 @@ module InputFile =
         else
           let line = input.[lineNum]
           if line.StartsWith "+" || line.StartsWith "-" then
-            let split = line.Split ' '
+            let split = line.Split(' ', StringSplitOptions.RemoveEmptyEntries)
             if split.[0].Length = 1 then lineNum, constraintCoeff, constraintSigns, rhs else
-            let coeff = split.[.. split.Length - 2] |> Array.map parseCoeff
-            let last = split.[split.Length - 1]
             
-            let constraintSign, _rhs =
-              match last.[0] with
-              | '<' -> if last.[1] = '=' then ConstraintSign.LessOrEqual, Double.Parse last.[2..] else failwith "Invalid constraintsign: '<'"
-              | '>' -> if last.[1] = '=' then ConstraintSign.GreaterOrEqual, Double.Parse last.[2..] else failwith "Invalid constraintsign: '>'"
-              | '=' -> ConstraintSign.Equal, Double.Parse last.[1..]
-              | c -> failwithf "Invalid constraintsign: '%c'" c
+            // Parse constraint by finding the sign
+            let constraintSign, _rhs, coeffCount =
+              // Check if last two tokens are sign + number (e.g., ">= 4")
+              if split.Length >= 2 && (split.[split.Length - 2] = "<=" || split.[split.Length - 2] = ">=" || split.[split.Length - 2] = "=") then
+                let sign = match split.[split.Length - 2] with
+                           | "<=" -> ConstraintSign.LessOrEqual
+                           | ">=" -> ConstraintSign.GreaterOrEqual  
+                           | "=" -> ConstraintSign.Equal
+                           | _ -> failwith "Invalid sign"
+                sign, Double.Parse split.[split.Length - 1], split.Length - 2
+              else
+                // Check if last token contains sign + number (e.g., ">=4")
+                let last = split.[split.Length - 1]
+                if last.StartsWith "<=" then ConstraintSign.LessOrEqual, Double.Parse last.[2..], split.Length - 1
+                elif last.StartsWith ">=" then ConstraintSign.GreaterOrEqual, Double.Parse last.[2..], split.Length - 1
+                elif last.StartsWith "=" then ConstraintSign.Equal, Double.Parse last.[1..], split.Length - 1
+                else failwithf "Invalid constraint format: '%s'" last
+            
+            let coeff = split.[.. coeffCount - 1] |> Array.map parseCoeff
 
             getConstraints (lineNum + 1) (coeff :: constraintCoeff) (constraintSign :: constraintSigns) (_rhs :: rhs)
           else 
