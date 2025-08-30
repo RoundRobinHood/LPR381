@@ -296,7 +296,7 @@ type RelaxedSimplexSensitivityContext(
   member val BInverse = bInverse.ToArray()
   member val internal bInverse = bInverse
 
-  member this.GetDualFormulation() = DualFormulation(canon)
+  member this.GetDualFormulation() = DualFormulation(formulation)
 
   member this.VerifyDuality(primalResult: SimplexResult, dualResult: SimplexResult) =
     match primalResult, dualResult with

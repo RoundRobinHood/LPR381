@@ -113,7 +113,7 @@ module Explorer =
         | None -> getOptimalNode tree.Children.[0]
       
       let optimalNode = getOptimalNode tree
-      let dualFormulation = DualFormulation(optimalNode.Canon)
+      let dualFormulation = DualFormulation(formulation)
       let dualResult = SolveSimplex (RevisedDualSimplex (dualFormulation.ToLPFormulation()))
       
       let dualityResult = 

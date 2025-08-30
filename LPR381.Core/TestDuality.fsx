@@ -34,16 +34,26 @@ let testDuality (name: string) (lp: LPFormulation) =
             | None -> getOptimalNode tree.Children.[0]
         
         let optimalNode = getOptimalNode primalTree
-        let sensitivity = RelaxedSimplexSensitivityContext(lp, optimalNode.Canon, optimalNode.Basis, Matrix<double>.Build.DenseOfArray optimalNode.BInverse)
-        
         // Get dual formulation and solve
-        let dualFormulation = sensitivity.GetDualFormulation().ToLPFormulation()
+        let dualFormulation = DualFormulation(lp).ToLPFormulation()
         let dualTree = RevisedDualSimplex dualFormulation
         let dualResult = Explorer.SolveSimplex dualTree
         printfn "Dual result: %A" dualResult
         
         // Verify duality
-        let dualityResult = sensitivity.VerifyDuality(primalResult, dualResult)
+        let dualityResult = 
+          match primalResult, dualResult with
+          | Optimal(_, _, primalObj), Optimal(_, _, dualObj) ->
+            let tolerance = 1e-6
+            if abs(primalObj - dualObj) < tolerance then
+              StrongDuality(primalObj, dualObj)
+            else
+              WeakDuality(primalObj, dualObj)
+          | Optimal(_, _, primalObj), Unbounded _ -> WeakDuality(primalObj, infinity)
+          | Unbounded _, Optimal(_, _, dualObj) -> WeakDuality(infinity, dualObj)
+          | Infeasible _, Unbounded _ -> NoDuality "Primal infeasible, dual unbounded"
+          | Unbounded _, Infeasible _ -> NoDuality "Primal unbounded, dual infeasible"
+          | _ -> NoDuality "Both problems infeasible or other error"
         printDualityResult dualityResult
         
     with ex ->
