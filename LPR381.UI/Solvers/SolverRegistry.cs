@@ -14,6 +14,7 @@ namespace LPR381.UI.Solvers
         {
             new("primal-simplex",  "Primal Simplex",  () => new PrimalSimplexRunner()),
             new("revised-simplex", "Revised Simplex", () => new RevisedSimplexRunner()),
+            new("cutting-plane",   "Cutting Plane",   () => new CuttingPlaneRunner()),
             // Add future solvers here; they will appear in the UI automatically.
         };
     }
