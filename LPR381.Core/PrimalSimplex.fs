@@ -72,9 +72,10 @@ type PrimalSimplex(item: SimplexNode, objectiveType: ObjectiveType, formulation:
         else
           rows_grabbed.Add oneRow |> ignore
           var_dict.[tableau.ColumnNames.[i]] <- tableau.Values.[oneRow, tableau.values.ColumnCount - 1]
+      let objValue = if objectiveType = ObjectiveType.Min then -tableau.Values.[0, tableau.values.ColumnCount - 1] else tableau.Values.[0, tableau.values.ColumnCount - 1]
       {
         Tableau= tableau
-        State= ResultState (Optimal (var_dict, formulation.fromLPCanonical var_dict, tableau.Values.[0, tableau.values.ColumnCount - 1]))
+        State= ResultState (Optimal (var_dict, formulation.fromLPCanonical var_dict, objValue))
       }
     else
       // Choose leaving variable

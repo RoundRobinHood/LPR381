@@ -131,43 +131,37 @@ namespace LPR381.UI.Core
             var m = canon.ConstraintMatrix.RowCount;
             var n = canon.ConstraintMatrix.ColumnCount;
             
-            // Pre-allocate column names array
+            // Combined matrix: objective row + constraint rows
+            var combinedMatrix = new double[m + 1, n + 1];
+            
+            // Objective row (first row)
+            for (int j = 0; j < n; j++) combinedMatrix[0, j] = canon.Objective[j];
+            combinedMatrix[0, n] = 0;
+            
+            // Constraint rows
+            for (int i = 0; i < m; i++)
+            {
+                for (int j = 0; j < n; j++)
+                    combinedMatrix[i + 1, j] = canon.ConstraintMatrix[i, j];
+                combinedMatrix[i + 1, n] = canon.RHS[i];
+            }
+            
+            // Column names
             var columnNames = new string[n + 1];
             Array.Copy(canon.VariableNames, columnNames, n);
             columnNames[n] = "RHS";
             
-            // Objective row
-            var objMatrix = new double[1, n + 1];
-            for (int j = 0; j < n; j++) objMatrix[0, j] = canon.Objective[j];
-            objMatrix[0, n] = 0;
+            // Row names: z + constraints
+            var rowNames = new string[m + 1];
+            rowNames[0] = "z";
+            for (int i = 0; i < m; i++) rowNames[i + 1] = $"c{i + 1}";
             
             _iterations.Add(new IterationTableau
             {
-                Title = "Canonical Form - Objective",
-                Columns = columnNames,
-                Rows = new[] { "z" },
-                Values = objMatrix
-            });
-            
-            // Constraint matrix
-            var constraintMatrix = new double[m, n + 1];
-            for (int i = 0; i < m; i++)
-            {
-                for (int j = 0; j < n; j++)
-                    constraintMatrix[i, j] = canon.ConstraintMatrix[i, j];
-                constraintMatrix[i, n] = canon.RHS[i];
-            }
-            
-            // Pre-allocate row names array
-            var rowNames = new string[m];
-            for (int i = 0; i < m; i++) rowNames[i] = $"c{i + 1}";
-            
-            _iterations.Add(new IterationTableau
-            {
-                Title = "Canonical Form - Constraints",
+                Title = "Canonical Form",
                 Columns = columnNames,
                 Rows = rowNames,
-                Values = constraintMatrix
+                Values = combinedMatrix
             });
         }
         

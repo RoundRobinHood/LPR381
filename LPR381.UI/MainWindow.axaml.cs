@@ -571,17 +571,22 @@ public partial class MainWindow : Window
         try
         {
             var input = GetUserInput();
-            var tempRunner = new PrimalSimplexRunner(); // Use any runner to build formulation
+            var tempRunner = new PrimalSimplexRunner();
             var formulation = ((SolverRunner)tempRunner).BuildFormulation(input);
-            var canonical = formulation.ToLPCanonical();
             
-            var preview = $"Objective: {canonical.ObjectiveType}\n";
-            preview += $"Variables: {string.Join(", ", canonical.VariableNames)}\n";
-            preview += $"Objective coeffs: [{string.Join(", ", canonical.Objective.ToArray().Select(x => x.ToString("F2")))}]\n";
-            preview += $"Constraints: {canonical.ConstraintMatrix.RowCount} x {canonical.ConstraintMatrix.ColumnCount}\n";
-            preview += $"RHS: [{string.Join(", ", canonical.RHS.ToArray().Select(x => x.ToString("F2")))}]";
+            // Use the same canonical form generation as iterations
+            tempRunner.GetType().GetMethod("AddCanonicalForm", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                ?.Invoke(tempRunner, new object[] { formulation });
             
-            previewBox.Text = preview;
+            if (tempRunner.Iterations.Count > 0)
+            {
+                var canonicalTableau = tempRunner.Iterations[0];
+                previewBox.Text = IterationFormat.Pretty(canonicalTableau);
+            }
+            else
+            {
+                previewBox.Text = "No canonical form generated";
+            }
         }
         catch (Exception ex)
         {

@@ -115,7 +115,7 @@
 								</StackPanel>
 
 								<!-- Canonical Form Preview -->
-								<TextBox x:Name="CanonicalPreviewBox" AcceptsReturn="True" Height="150" Watermark="Canonical form will appear here" IsReadOnly="True" Margin="0,10"/>
+								<TextBox x:Name="CanonicalPreviewBox" AcceptsReturn="True" Height="150" Watermark="Canonical form will appear here" IsReadOnly="True" Margin="0,10" FontFamily="Consolas, Courier New, monospace"/>
 							</StackPanel>
 						</Border>
 					</StackPanel>

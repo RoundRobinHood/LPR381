@@ -29,11 +29,17 @@ namespace LPR381.UI.Solvers
                 var (stateCase, _) = FSharpInterop.ReadUnion(item.State);
                 var title = stateCase == "Pivot" ? $"Tableau {idx} (Pivot)" : $"Tableau {idx} (Final)";
                 
+                // Fix row names: first row should be "z", rest should be "c1", "c2", etc.
+                var fixedRowNames = new string[t.Values.GetLength(0)];
+                fixedRowNames[0] = "z";
+                for (int i = 1; i < fixedRowNames.Length; i++)
+                    fixedRowNames[i] = $"c{i}";
+                
                 _iterations.Add(new IterationTableau
                 {
                     Title = title,
                     Columns = t.ColumnNames,
-                    Rows = t.RowNames,
+                    Rows = fixedRowNames,
                     Values = t.Values
                 });
 
