@@ -188,9 +188,9 @@ public partial class MainWindow : Window
         // Clear objective
         if (_objBox != null) _objBox.Text = "";
         
-        // Reset objective type to Max
+        // Reset objective type to no selection
         var objTypeCombo = this.FindControl<ComboBox>("ObjectiveTypeCombo");
-        if (objTypeCombo != null) objTypeCombo.SelectedIndex = 0;
+        if (objTypeCombo != null) objTypeCombo.SelectedIndex = -1;
         
         // Clear all constraints except the first one
         if (_panel != null)
@@ -498,7 +498,7 @@ public partial class MainWindow : Window
         }
     }
     
-    private void AddConstraintRow(string lhs = "", string sign = "<=", string rhs = "")
+    private void AddConstraintRow(string lhs = "", string sign = "", string rhs = "")
     {
         var row = new StackPanel
         {
@@ -524,7 +524,7 @@ public partial class MainWindow : Window
                 new ComboBoxItem { Content = "=" }
             }
         };
-        combo.SelectedIndex = sign switch { ">=" => 1, "=" => 2, _ => 0 };
+        combo.SelectedIndex = sign switch { ">=" => 1, "=" => 2, "<=" => 0, _ => -1 };
 
         var rhsBox = new TextBox
         {
