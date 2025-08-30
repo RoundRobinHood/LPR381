@@ -100,3 +100,35 @@ module Explorer =
     match solve None [ itree ] with
     | Some x -> x
     | None -> failwith "No simplex result (unexpected)"
+
+  let PerformSensitivityAnalysis(formulation: LPFormulation) =
+    let tree = RevisedDualSimplex formulation
+    let result = SolveSimplex tree
+    
+    match result with
+    | Optimal _ ->
+      let rec getOptimalNode (tree: ITree<RevisedSimplexNode>) =
+        match (tree.Item :> ISimplexResultProvider).SimplexResult with
+        | Some _ -> tree.Item
+        | None -> getOptimalNode tree.Children.[0]
+      
+      let optimalNode = getOptimalNode tree
+      let dualFormulation = DualFormulation(optimalNode.Canon)
+      let dualResult = SolveSimplex (RevisedDualSimplex (dualFormulation.ToLPFormulation()))
+      
+      let dualityResult = 
+        match result, dualResult with
+        | Optimal(_, _, primalObj), Optimal(_, _, dualObj) ->
+          let tolerance = 1e-6
+          if abs(primalObj - dualObj) < tolerance then
+            StrongDuality(primalObj, dualObj)
+          else
+            WeakDuality(primalObj, dualObj)
+        | Optimal(_, _, primalObj), Unbounded _ -> WeakDuality(primalObj, infinity)
+        | Unbounded _, Optimal(_, _, dualObj) -> WeakDuality(infinity, dualObj)
+        | Infeasible _, Unbounded _ -> NoDuality "Primal infeasible, dual unbounded"
+        | Unbounded _, Infeasible _ -> NoDuality "Primal unbounded, dual infeasible"
+        | _ -> NoDuality "Both problems infeasible or other error"
+      
+      (result, dualResult, dualityResult)
+    | _ -> failwithf "Cannot perform sensitivity analysis on non-optimal result: %A" result

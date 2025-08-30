@@ -448,3 +448,29 @@ type SimplexResult =
 
 type ISimplexResultProvider =
   abstract member SimplexResult: Option<SimplexResult>
+
+type DualityResult =
+  | StrongDuality of primalObjective:double * dualObjective:double
+  | WeakDuality of primalObjective:double * dualObjective:double
+  | NoDuality of reason:string
+
+type DualFormulation(primal: LPCanonical) =
+  let dualObjective = primal.RHS
+  let dualConstraintMatrix = primal.ConstraintMatrix.Transpose()
+  let dualRHS = primal.Objective
+  let dualObjectiveType = if primal.ObjectiveType = ObjectiveType.Max then ObjectiveType.Min else ObjectiveType.Max
+  let dualVarNames = Array.init primal.RHS.Count (fun i -> sprintf "y%d" (i+1))
+  let dualSignRestrictions = Array.create primal.RHS.Count SignRestriction.Positive
+  let dualIntRestrictions = Array.create primal.RHS.Count IntRestriction.Unrestricted
+
+  member _.ToLPFormulation() =
+    LPFormulation(
+      dualObjectiveType,
+      dualVarNames,
+      dualObjective.ToArray(),
+      dualConstraintMatrix.ToArray(),
+      Array.create primal.Objective.Count ConstraintSign.GreaterOrEqual,
+      dualRHS.ToArray(),
+      dualSignRestrictions,
+      dualIntRestrictions
+    )

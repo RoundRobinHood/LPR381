@@ -212,6 +212,22 @@ type RelaxedSimplexSensitivityContext(
   member val BInverse = bInverse.ToArray()
   member val internal bInverse = bInverse
 
+  member this.GetDualFormulation() = DualFormulation(canon)
+
+  member this.VerifyDuality(primalResult: SimplexResult, dualResult: SimplexResult) =
+    match primalResult, dualResult with
+    | Optimal(_, _, primalObj), Optimal(_, _, dualObj) ->
+      let tolerance = 1e-6
+      if abs(primalObj - dualObj) < tolerance then
+        StrongDuality(primalObj, dualObj)
+      else
+        WeakDuality(primalObj, dualObj)
+    | Optimal(_, _, primalObj), Unbounded _ -> WeakDuality(primalObj, infinity)
+    | Unbounded _, Optimal(_, _, dualObj) -> WeakDuality(infinity, dualObj)
+    | Infeasible _, Unbounded _ -> NoDuality "Primal infeasible, dual unbounded"
+    | Unbounded _, Infeasible _ -> NoDuality "Primal unbounded, dual infeasible"
+    | _ -> NoDuality "Both problems infeasible or other error"
+
   new(formulation: LPFormulation, canon: LPCanonical, basis: int array)=
     let B =
       basis
