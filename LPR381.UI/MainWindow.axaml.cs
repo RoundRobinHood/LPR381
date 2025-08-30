@@ -28,6 +28,7 @@ public partial class MainWindow : Window
     private ComboBox? _algoCombo;
     private ComboBox? _varTypeCombo;
     private TextBlock? _solverInfoText;
+    private ISolverRunner? _lastRunner;
 
     public MainWindow()
     {
@@ -83,6 +84,7 @@ public partial class MainWindow : Window
 
             // Run
             var summary = await runner.RunAsync(input);
+            _lastRunner = runner;
 
             if (_iterationsBox != null)
                 _iterationsBox.Text = string.Join("\n\n", runner.Iterations.Select(IterationFormat.Pretty));
@@ -274,6 +276,33 @@ public partial class MainWindow : Window
             FileContentTextBox.Text = fileContent;
         }
 
+    }
+    
+    private async void ExportButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_lastRunner?.Iterations.Count == 0)
+        {
+            if (_outputBox != null) _outputBox.Text = "No results to export. Please solve a problem first.";
+            return;
+        }
+
+        var dialog = new SaveFileDialog();
+        dialog.Filters.Add(new FileDialogFilter() { Name = "Text Files", Extensions = { "txt" } });
+        dialog.DefaultExtension = "txt";
+
+        var result = await dialog.ShowAsync(this);
+        if (result != null)
+        {
+            try
+            {
+                _lastRunner.ExportToFile(result);
+                if (_outputBox != null) _outputBox.Text += $"\n\nResults exported to: {result}";
+            }
+            catch (Exception ex)
+            {
+                if (_outputBox != null) _outputBox.Text += $"\n\nExport failed: {ex.Message}";
+            }
+        }
     }
 }
 //// --- New lightweight parser for linear expressions like "3x1 - 2x2 + x3" (no LPObjective/LPConstraint) ---

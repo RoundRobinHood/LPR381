@@ -4,6 +4,8 @@ using LPR381.UI.Solvers;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using System.IO;
+using LPR381.UI.Util;
 
 namespace LPR381.UI.Core
 {
@@ -76,6 +78,12 @@ namespace LPR381.UI.Core
                 Rows = Enumerable.Range(1, m).Select(i => $"c{i}").ToArray(),
                 Values = constraintMatrix
             });
+        }
+        
+        public void ExportToFile(string filePath)
+        {
+            var content = string.Join("\n\n", _iterations.Select(IterationFormat.Pretty));
+            File.WriteAllText(filePath, content);
         }
     }
 }

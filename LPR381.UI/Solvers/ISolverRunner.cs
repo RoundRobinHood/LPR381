@@ -18,5 +18,6 @@ namespace LPR381.UI.Solvers
         string Display { get; }
         IReadOnlyList<IterationTableau> Iterations { get; }
         Task<SolveSummary> RunAsync(UserProblem input);
+        void ExportToFile(string filePath);
     }
 }
