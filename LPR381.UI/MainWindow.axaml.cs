@@ -46,7 +46,7 @@ public partial class MainWindow : Window
         _varTypeCombo = this.FindControl<ComboBox>("VariableTypeCombo");
         _solverInfoText = this.FindControl<TextBlock>("SolverInfoText");
         
-        // Populate algorithm combo from registry
+        // Populate algorithm combos from registry
         if (_algoCombo != null)
         {
             _algoCombo.Items.Clear();
@@ -55,6 +55,17 @@ public partial class MainWindow : Window
                 _algoCombo.Items.Add(new ComboBoxItem { Content = entry.Display, Tag = entry.Key });
             }
             _algoCombo.SelectedIndex = 0;
+        }
+        
+        var fileAlgoCombo = this.FindControl<ComboBox>("FileAlgorithmCombo");
+        if (fileAlgoCombo != null)
+        {
+            fileAlgoCombo.Items.Clear();
+            foreach (var entry in SolverRegistry.Available)
+            {
+                fileAlgoCombo.Items.Add(new ComboBoxItem { Content = entry.Display, Tag = entry.Key });
+            }
+            fileAlgoCombo.SelectedIndex = 0;
         }
     }
 
@@ -229,11 +240,106 @@ public partial class MainWindow : Window
         {
             string filePath = result[0];
             string fileContent = File.ReadAllText(filePath);
-
-        
             FileContentTextBox.Text = fileContent;
         }
-
+    }
+    
+    private async void FileSubmitButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_outputBox != null) _outputBox.Text = "";
+        if (_iterationsBox != null) _iterationsBox.Text = "";
+        
+        try
+        {
+            var fileContent = FileContentTextBox?.Text;
+            if (string.IsNullOrWhiteSpace(fileContent))
+            {
+                if (_outputBox != null) _outputBox.Text = "Please load a file first.";
+                return;
+            }
+            
+            // Parse file using F# InputFile module
+            LPFormulation formulation = default!;
+            string error = "";
+            if (!InputFile.TryInterpretText(fileContent, ref formulation, ref error))
+            {
+                if (_outputBox != null) _outputBox.Text = $"File parsing error: {error}";
+                return;
+            }
+            
+            // Convert to UserProblem format
+            var input = ConvertToUserProblem(formulation);
+            
+            // Get selected algorithm from file input tab
+            var fileAlgoCombo = this.FindControl<ComboBox>("FileAlgorithmCombo");
+            var runner = CreateRunnerFromCombo(fileAlgoCombo ?? _algoCombo!);
+            
+            // Quick validation
+            if (runner.Key == "knapsack" && formulation.ConstraintSigns.Length != 1)
+            {
+                if (_outputBox != null) _outputBox.Text = "Knapsack requires exactly one constraint";
+                return;
+            }
+            
+            // Run solver
+            var summary = await runner.RunAsync(input);
+            _lastRunner = runner;
+            
+            if (_iterationsBox != null)
+                _iterationsBox.Text = string.Join("\n\n", runner.Iterations.Select(IterationFormat.Pretty));
+            
+            if (_outputBox != null)
+            {
+                _outputBox.Text = $"{summary.Message}\nObjective = {summary.Objective}\n" +
+                    string.Join("\n", summary.VariableValues.Select(kv => $"{kv.Key} = {kv.Value}"));
+            }
+        }
+        catch (Exception ex)
+        {
+            if (_outputBox != null) _outputBox.Text = "Error: " + ex.Message;
+        }
+    }
+    
+    private static UserProblem ConvertToUserProblem(LPFormulation formulation)
+    {
+        // Convert objective
+        var objType = formulation.ObjectiveType == ObjectiveType.Max ? "max" : "min";
+        var objTerms = formulation.VarNames.Zip(formulation.Objective, (name, coeff) => $"{coeff:+0.###;-0.###}{name}");
+        var objLine = $"{objType} {string.Join(" ", objTerms)}";
+        
+        // Convert constraints
+        var constraints = new string[formulation.ConstraintSigns.Length];
+        for (int i = 0; i < constraints.Length; i++)
+        {
+            var terms = new List<string>();
+            for (int j = 0; j < formulation.VarNames.Length; j++)
+            {
+                var coeff = formulation.ConstraintCoefficients[i, j];
+                if (Math.Abs(coeff) > 1e-9)
+                    terms.Add($"{coeff:+0.###;-0.###}{formulation.VarNames[j]}");
+            }
+            var sign = formulation.ConstraintSigns[i] switch
+            {
+                ConstraintSign.LessOrEqual => "<=",
+                ConstraintSign.GreaterOrEqual => ">=",
+                _ => "="
+            };
+            constraints[i] = $"{string.Join(" ", terms)} {sign} {formulation.RHS[i]}";
+        }
+        
+        // Determine variable type
+        var intMode = "continuous";
+        if (formulation.VarIntRestrictions.Any(r => r == IntRestriction.Binary))
+            intMode = "binary";
+        else if (formulation.VarIntRestrictions.Any(r => r == IntRestriction.Integer))
+            intMode = "integer";
+        
+        return new UserProblem
+        {
+            ObjectiveLine = objLine,
+            Constraints = constraints,
+            IntMode = intMode
+        };
     }
     
     private async void ExportButton_Click(object sender, RoutedEventArgs e)
