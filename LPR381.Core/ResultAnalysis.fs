@@ -17,6 +17,16 @@ type VariableRange =
     UpperBoundSource: BindSource
     LowerBoundSource: BindSource
   }
+  
+  static member Unbounded =
+    {
+      UpperBound = infinity
+      LowerBound = -infinity
+      UpperBoundInclusive = false
+      LowerBoundInclusive = false
+      UpperBoundSource = None
+      LowerBoundSource = None
+    }
 
 type CanonicalSensitivityContext (
   canon: LPCanonical,
@@ -137,7 +147,7 @@ type CanonicalSensitivityContext (
       else
         {
           UpperBound = infinity
-          LowerBound = infinity
+          LowerBound = -infinity
           UpperBoundInclusive = false
           LowerBoundInclusive = false
           UpperBoundSource = None
@@ -206,6 +216,80 @@ type RelaxedSimplexSensitivityContext(
   basis: int array,
   bInverse: Matrix<double>
 )=
+  let constraintCardinality = function
+    | ConstraintSign.LessOrEqual | ConstraintSign.GreaterOrEqual -> 1
+    | ConstraintSign.Equal -> 2
+    | _ -> failwith "Invalid constraint sign"
+
+  let variableCardinality = function
+    | SignRestriction.Positive | SignRestriction.Negative -> 1
+    | SignRestriction.Unrestricted -> 2
+    | _ -> failwith "Invalid sign restriction"
+
+  let getCanonConstraintCount constraintsigns =
+    constraintsigns |> Array.map constraintCardinality |> Array.sum
+
+  let getCanonVariableCount signrestrictions =
+    signrestrictions |> Array.map variableCardinality |> Array.sum
+
+  let formulationConstraint canonConstraint =
+    let rec ans (i: int) (sum: int) =
+      let amount = constraintCardinality formulation.ConstraintSigns.[i]
+      if sum + amount > canonConstraint || i = formulation.ConstraintSigns.Length - 1 then
+        i
+      else
+        ans (i + 1) (sum + amount)
+    ans 0 0
+
+  let formulationVariable canonVariable =
+    if canonVariable > getCanonVariableCount formulation.VarSignRestrictions then
+      canonVariable, canon.VariableNames.[canonVariable]
+    else
+    let rec ans (i: int) (sum: int) =
+      let amount = variableCardinality formulation.VarSignRestrictions.[i]
+      if sum + amount > canonVariable || i = formulation.Objective.Length - 1 then
+        i
+      else
+        ans (i + 1) (sum + amount)
+    let formVar = ans 0 0
+    formVar, formulation.VarNames.[formVar]
+
+  let formulationSource = function
+    | Constraint i -> Constraint (formulationConstraint i)
+    | Variable (i, _) -> 
+      let formulationVariable = formulationVariable i
+      Variable formulationVariable
+    | x -> x
+
+  let flipRange range =
+    {
+      UpperBound = -range.LowerBound
+      LowerBound = -range.UpperBound
+      UpperBoundInclusive = range.LowerBoundInclusive
+      LowerBoundInclusive = range.UpperBoundInclusive
+      UpperBoundSource = range.LowerBoundSource
+      LowerBoundSource = range.LowerBoundSource
+    }
+
+  let intersectRange range1 range2 =
+    {
+      UpperBound = if range1.UpperBound < range2.UpperBound then range1.UpperBound else range2.UpperBound
+      LowerBound = if range1.LowerBound > range2.LowerBound then range1.LowerBound else range2.LowerBound
+      UpperBoundInclusive = if range1.UpperBound < range2.UpperBound then range1.UpperBoundInclusive else range2.UpperBoundInclusive
+      LowerBoundInclusive = if range1.LowerBound > range2.LowerBound then range1.LowerBoundInclusive else range2.LowerBoundInclusive
+      UpperBoundSource = if range1.UpperBound < range2.UpperBound then range1.UpperBoundSource else range2.UpperBoundSource
+      LowerBoundSource = if range1.LowerBound > range2.LowerBound then range1.LowerBoundSource else range2.LowerBoundSource
+    }
+
+  let formulationRange range =
+    { range with UpperBoundSource = formulationSource range.UpperBoundSource; LowerBoundSource = formulationSource range.LowerBoundSource }
+
+  let canonicalContext = CanonicalSensitivityContext(canon, basis, bInverse)
+
+  do
+    if formulation.VarIntRestrictions |> Array.exists ((<>) IntRestriction.Unrestricted) then
+      invalidArg "formulation" "Can't do relaxed sensitivity analysis on a problem with int-restricted variables"
+
   member val Formulation = formulation
   member val Canon = canon
   member val Basis = basis
@@ -227,6 +311,313 @@ type RelaxedSimplexSensitivityContext(
     | Infeasible _, Unbounded _ -> NoDuality "Primal infeasible, dual unbounded"
     | Unbounded _, Infeasible _ -> NoDuality "Primal unbounded, dual infeasible"
     | _ -> NoDuality "Both problems infeasible or other error"
+
+  member _.RHSRange i =
+    let canonicalIndex = getCanonConstraintCount formulation.ConstraintSigns.[0..i-1]
+    match formulation.ConstraintSigns.[i] with
+    | ConstraintSign.LessOrEqual ->
+      canonicalContext.RHSRange canonicalIndex |> formulationRange
+    | ConstraintSign.GreaterOrEqual ->
+      canonicalContext.RHSRange canonicalIndex |> flipRange |> formulationRange
+    | ConstraintSign.Equal ->
+      let coeffs = bInverse.Column canonicalIndex - bInverse.Column (canonicalIndex + 1)
+      
+      let mutable lowerBoundSource, upperBoundSource = None, None
+      let mutable lowerBound, upperBound = -infinity, infinity
+
+      for j, coeff in coeffs.EnumerateIndexed() do
+        if coeff <> 0 then
+          let ratio = -canonicalContext.OptimalRHS.[j] / coeff
+          if ratio > 0 && ratio < upperBound || ratio = 0 && coeff < 0 then
+            upperBound <- ratio
+            upperBoundSource <- Constraint (formulationConstraint j)
+          elif ratio < 0 && ratio > lowerBound || ratio = 0 && coeff > 0 then
+            lowerBound <- ratio
+            lowerBoundSource <- Constraint (formulationConstraint j)
+
+      {
+        UpperBound = formulation.RHS.[i] + upperBound
+        LowerBound = formulation.RHS.[i] + lowerBound
+        UpperBoundInclusive = upperBound <> infinity
+        LowerBoundInclusive = lowerBound <> -infinity
+        UpperBoundSource = upperBoundSource
+        LowerBoundSource = lowerBoundSource
+      }
+    | _ -> failwith "Unexpected error: incorrect constraint sign type"
+
+  member _.ObjectiveCoeffRange i =
+    let canonicalIndex = getCanonVariableCount formulation.VarSignRestrictions.[0..i-1]
+    match formulation.VarSignRestrictions.[i] with
+    | SignRestriction.Positive ->
+      canonicalContext.ObjectiveCoeffRange canonicalIndex |> formulationRange
+    | SignRestriction.Negative ->
+      canonicalContext.ObjectiveCoeffRange canonicalIndex |> flipRange |> formulationRange
+    | SignRestriction.Unrestricted ->
+      let posIsBasic = Array.exists ((=) canonicalIndex) basis
+      let negIsBasic = Array.exists ((=) (canonicalIndex+1)) basis
+
+      if not posIsBasic && not negIsBasic then
+        let posRange = canonicalContext.ObjectiveCoeffRange canonicalIndex |> formulationRange
+        let negRange = canonicalContext.ObjectiveCoeffRange (canonicalIndex + 1) |> flipRange |> formulationRange
+
+        intersectRange posRange negRange
+      else
+        let posBasisIndex = if posIsBasic then basis |> Array.findIndex ((=) canonicalIndex) else -1
+        let negBasisIndex = if negIsBasic then basis |> Array.findIndex ((=) (canonicalIndex+1)) else -1
+        let mutable lowerBoundSource, upperBoundSource = None, None
+        let mutable lowerBound, upperBound = -infinity, infinity
+        for j in [ 0 .. canon.Objective.Count - 1 ] do
+          let coeffA = if posIsBasic then canonicalContext.ConstraintMatrix.[posBasisIndex, j] else 0
+          let coeffB = if negIsBasic then canonicalContext.ConstraintMatrix.[negBasisIndex, j] else 0
+          let coeff = if canon.ObjectiveType = ObjectiveType.Max then coeffA - coeffB else coeffB - coeffA
+          if basis |> Array.contains j |> not && coeff <> 0 && j <> canonicalIndex && j <> canonicalIndex + 1 then
+            let ratio = canonicalContext.ReducedCosts.[j] / coeff
+            let formulationVar = formulationVariable j
+            if ratio < 0 && ratio > lowerBound || ratio = 0 && coeff < 0 then
+              lowerBound <- ratio
+              lowerBoundSource <- Variable formulationVar
+            elif ratio > 0 && ratio < upperBound || ratio = 0 && coeff > 0 then
+              upperBound <- ratio
+              upperBoundSource <- Variable formulationVar
+
+        {
+          UpperBound = formulation.Objective.[i] + upperBound
+          LowerBound = formulation.Objective.[i] + lowerBound
+          UpperBoundInclusive = upperBound <> infinity
+          LowerBoundInclusive = lowerBound <> -infinity
+          UpperBoundSource = upperBoundSource
+          LowerBoundSource = lowerBoundSource
+        }
+    | _ -> failwith "Invalid sign restriction"
+
+  member _.ConstraintCellRange i j =
+    let value = formulation.ConstraintCoefficients.[i, j]
+    let canonicalColumn = getCanonVariableCount formulation.VarSignRestrictions.[0..j-1]
+    let canonicalRow = getCanonConstraintCount formulation.ConstraintSigns.[0..i-1]
+    match formulation.VarSignRestrictions.[j] with
+    | SignRestriction.Positive ->
+      match formulation.ConstraintSigns.[i] with
+      | ConstraintSign.LessOrEqual ->
+        canonicalContext.ConstraintCellRange canonicalRow canonicalColumn |> formulationRange
+      | ConstraintSign.GreaterOrEqual ->
+        canonicalContext.ConstraintCellRange canonicalRow canonicalColumn |> flipRange |> formulationRange
+      | ConstraintSign.Equal ->
+        let coeff = - (bInverse.Column canonicalRow - bInverse.Column (canonicalRow+1)).DotProduct canonicalContext.CB
+        let coeff = if canon.ObjectiveType = ObjectiveType.Max then coeff else -coeff
+        let ratio = - canonicalContext.ReducedCosts.[canonicalColumn] / coeff
+        if ratio < 0 || ratio = 0 && coeff < 0 then
+          {
+            UpperBound = infinity
+            LowerBound = value + ratio
+            UpperBoundInclusive = false
+            LowerBoundInclusive = true
+            UpperBoundSource = None
+            LowerBoundSource = Variable (j, formulation.VarNames.[j])
+          }
+        elif ratio > 0 || ratio = 0 && coeff > 0 then
+          {
+            UpperBound = value + ratio
+            LowerBound = -infinity
+            UpperBoundInclusive = true
+            LowerBoundInclusive = false
+            UpperBoundSource = Variable (j, formulation.VarNames.[j])
+            LowerBoundSource = None
+          }
+        else
+          {
+            UpperBound = infinity
+            LowerBound = -infinity
+            UpperBoundInclusive = false
+            LowerBoundInclusive = false
+            UpperBoundSource = None
+            LowerBoundSource = None
+          }
+      | _ -> failwith "Invalid constraint sign"
+    | SignRestriction.Negative ->
+      match formulation.ConstraintSigns.[i] with
+      | ConstraintSign.LessOrEqual ->
+        canonicalContext.ConstraintCellRange canonicalRow canonicalColumn |> flipRange |> formulationRange
+      | ConstraintSign.GreaterOrEqual ->
+        canonicalContext.ConstraintCellRange canonicalRow canonicalColumn |> formulationRange
+      | ConstraintSign.Equal ->
+        let coeff = (bInverse.Column canonicalRow - bInverse.Column (canonicalRow+1)).DotProduct canonicalContext.CB
+        let coeff = if canon.ObjectiveType = ObjectiveType.Max then coeff else -coeff
+        let ratio = - canonicalContext.ReducedCosts.[canonicalColumn] / coeff
+        let value = formulation.ConstraintCoefficients.[i,j]
+        if ratio < 0 || ratio = 0 && coeff < 0 then
+          {
+            UpperBound = infinity
+            LowerBound = value + ratio
+            UpperBoundInclusive = false
+            LowerBoundInclusive = true
+            UpperBoundSource = None
+            LowerBoundSource = Variable (j, formulation.VarNames.[j])
+          }
+        elif ratio > 0 || ratio = 0 && coeff > 0 then
+          {
+            UpperBound = value + ratio
+            LowerBound = -infinity
+            UpperBoundInclusive = true
+            LowerBoundInclusive = false
+            UpperBoundSource = Variable (j, formulation.VarNames.[j])
+            LowerBoundSource = None
+          }
+        else
+          {
+            UpperBound = infinity
+            LowerBound = -infinity
+            UpperBoundInclusive = false
+            LowerBoundInclusive = false
+            UpperBoundSource = None
+            LowerBoundSource = None
+          }
+      | _ -> failwith "Invalid constraint sign"
+    | SignRestriction.Unrestricted ->
+      let posIsBasic = Array.exists ((=) canonicalColumn) basis
+      let negIsBasic = Array.exists ((=) (canonicalColumn+1)) basis
+      let posBasisIndex = if posIsBasic then basis |> Array.findIndex ((=) canonicalColumn) else -1
+      let negBasisIndex = if negIsBasic then basis |> Array.findIndex ((=) (canonicalColumn+1)) else -1
+      let basic_index = if posIsBasic then posBasisIndex else negBasisIndex
+      let non_basic_index = if posIsBasic then canonicalColumn + 1 else canonicalColumn
+
+      if not posIsBasic && not negIsBasic then
+        match formulation.ConstraintSigns.[i] with
+        | ConstraintSign.LessOrEqual ->
+          intersectRange (canonicalContext.ConstraintCellRange canonicalRow canonicalColumn) (canonicalContext.ConstraintCellRange canonicalRow (canonicalColumn+1) |> flipRange) |> formulationRange 
+        | ConstraintSign.GreaterOrEqual ->
+          intersectRange (canonicalContext.ConstraintCellRange canonicalRow canonicalColumn |> flipRange) (canonicalContext.ConstraintCellRange canonicalRow (canonicalColumn+1)) |> formulationRange
+        | ConstraintSign.Equal ->
+          let coeff = (bInverse.Column canonicalRow - bInverse.Column (canonicalRow + 1)).DotProduct canonicalContext.CB
+          let coeff = if canon.ObjectiveType = ObjectiveType.Max then coeff else -coeff
+          if coeff <> 0 then
+            let posRatio = - canonicalContext.ReducedCosts.[canonicalColumn] / coeff
+            let negRatio = canonicalContext.ReducedCosts.[canonicalColumn+1] / coeff
+            let posRange =
+              if posRatio > 0 || posRatio = 0 && coeff > 0 then
+                {
+                  UpperBound = value + posRatio
+                  LowerBound = -infinity
+                  UpperBoundSource = Variable (j, formulation.VarNames.[j])
+                  LowerBoundSource = None
+                  UpperBoundInclusive = true
+                  LowerBoundInclusive = false
+                }
+              elif posRatio < 0 || posRatio = 0 && coeff < 0 then
+                {
+                  UpperBound = infinity
+                  LowerBound = -infinity
+                  UpperBoundSource = None
+                  LowerBoundSource = Variable (j, formulation.VarNames.[j])
+                  UpperBoundInclusive = false
+                  LowerBoundInclusive = true
+                }
+              else
+                VariableRange.Unbounded
+            let negRange =
+              if negRatio > 0 || negRatio = 0 && coeff < 0 then
+                {
+                  UpperBound = value + negRatio
+                  LowerBound = -infinity
+                  UpperBoundSource = Variable (j, formulation.VarNames.[j])
+                  LowerBoundSource = None
+                  UpperBoundInclusive = true
+                  LowerBoundInclusive = false
+                }
+              elif negRatio < 0 || negRatio = 0 && coeff > 0 then
+                {
+                  UpperBound = infinity
+                  LowerBound = value + negRatio
+                  UpperBoundSource = None
+                  LowerBoundSource = Variable (j, formulation.VarNames.[j])
+                  UpperBoundInclusive = false
+                  LowerBoundInclusive = true
+                }
+              else
+                VariableRange.Unbounded
+            intersectRange posRange negRange
+          else
+            VariableRange.Unbounded
+        | _ -> failwith "Invalid constraint sign"
+      else
+        let determinant_difference, DT_diff =
+          match formulation.ConstraintSigns.[i] with
+          | ConstraintSign.LessOrEqual ->
+            bInverse.[basic_index, canonicalRow] / bInverse.Determinant(),
+            (bInverse.[basic_index, canonicalRow] * bInverse - (bInverse.Column canonicalRow).OuterProduct (bInverse.Row basic_index)) / bInverse.Determinant()
+          | ConstraintSign.GreaterOrEqual ->
+            -bInverse.[basic_index, canonicalRow] / bInverse.Determinant(),
+            -(bInverse.[basic_index, canonicalRow] * bInverse - (bInverse.Column canonicalRow).OuterProduct (bInverse.Row basic_index)) / bInverse.Determinant()
+          | ConstraintSign.Equal ->
+            let u = Vector<double>.Build.Dense(bInverse.RowCount, 0.0)
+            u.[canonicalRow] <- 1.0
+            u.[canonicalRow+1] <- -1.0
+            let v = Vector<double>.Build.Dense(bInverse.ColumnCount, 0.0)
+            v.[basic_index] <- 1.0
+
+            v * bInverse * u / bInverse.Determinant(),
+            (v * bInverse * u * bInverse - bInverse * u.OuterProduct v * bInverse) / bInverse.Determinant()
+          | _ -> failwith "Invalid constraint sign"
+
+        let determinant_difference, DT_diff = if negIsBasic then -determinant_difference, -DT_diff else determinant_difference, DT_diff
+        printfn "determinant_difference: %.2f" determinant_difference
+        printfn "difference matrix: %A" DT_diff
+
+        let reduced_cost_delta = canonicalContext.CB * DT_diff * canon.ConstraintMatrix - determinant_difference * canon.Objective
+        let rhs_delta = DT_diff * canon.RHS
+
+        let mutable lowerBoundSource, upperBoundSource = None, None
+        let mutable lowerBound, upperBound = -infinity, infinity
+
+        if determinant_difference <> 0 then
+          let singularity_ratio = - determinant_difference / bInverse.Determinant()
+          if singularity_ratio < 0 then
+            lowerBound <- singularity_ratio
+            lowerBoundSource <- Singularity
+          elif singularity_ratio > 0 then
+            upperBound <- singularity_ratio
+            upperBoundSource <- Singularity
+
+        let var_coeff = - (bInverse.Column canonicalRow - bInverse.Column (canonicalRow+1)).DotProduct canonicalContext.CB
+        let var_coeff = if not negIsBasic then -var_coeff else var_coeff
+
+        let determC = canonicalContext.ReducedCosts / bInverse.Determinant()
+        let determB = canonicalContext.OptimalRHS / bInverse.Determinant()
+        printfn "DetermC: %A" determC
+        printfn "reduced_cost_delta: %A" (reduced_cost_delta.ToArray())
+        printfn "DetermB: %A" determB
+        printfn "rhs_delta: %A" (rhs_delta.ToArray())
+
+        for var, coeff in reduced_cost_delta.EnumerateIndexed() do
+          if basis |> Array.contains var |> not && coeff <> 0 && var <> canonicalColumn && var <> canonicalColumn + 1 then
+            let coeff = if var = non_basic_index then coeff + var_coeff else coeff
+            let coeff = if canon.ObjectiveType = ObjectiveType.Max then coeff else -coeff
+            let ratio = determC.[var] / coeff
+            if ratio < 0 && ratio > lowerBound || ratio = 0 && coeff < 0 then
+              lowerBound <- ratio
+              lowerBoundSource <- Variable (formulationVariable var)
+            elif ratio > 0 && ratio < upperBound || ratio = 0 && coeff > 0 then
+              upperBound <- ratio
+              upperBoundSource <- Variable (formulationVariable var)
+
+        for row, coeff in rhs_delta.EnumerateIndexed() do
+          if coeff <> 0 then
+            let ratio = - determB.[row] / coeff
+            if ratio < 0 && ratio > lowerBound || ratio = 0 && coeff < 0 then
+              lowerBound <- ratio
+              lowerBoundSource <- Constraint (formulationConstraint row)
+            elif ratio > 0 && ratio < upperBound || ratio = 0 && coeff > 0 then
+              upperBound <- ratio
+              upperBoundSource <- Constraint (formulationConstraint row)
+
+        {
+          UpperBound = value + upperBound
+          LowerBound = value + lowerBound
+          UpperBoundInclusive = upperBound <> infinity && not upperBoundSource.IsSingularity
+          LowerBoundInclusive = lowerBound <> -infinity && not lowerBoundSource.IsSingularity
+          UpperBoundSource = upperBoundSource
+          LowerBoundSource = lowerBoundSource
+        }
+    | _ -> failwith "Invalid constraint sign"
 
   new(formulation: LPFormulation, canon: LPCanonical, basis: int array)=
     let B =

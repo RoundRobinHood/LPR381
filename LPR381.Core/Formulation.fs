@@ -371,6 +371,7 @@ type LPFormulation(
         constraintMat.[writeRow, writeColumn] <- 1
         rhs.[writeRow] <- 1
         writeRow <- writeRow + 1
+        writeColumn <- writeColumn + 1
         varIntRestrictions.[i] <- IntRestriction.Integer
       | _ -> ()
 
