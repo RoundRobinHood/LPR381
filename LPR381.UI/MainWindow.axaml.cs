@@ -123,6 +123,7 @@ public partial class MainWindow : Window
         if (s.Contains("revised")) return "revised-simplex";
         if (s.Contains("branch") && s.Contains("bound")) return "branch-and-bound";
         if(s.Contains("cutting") && s.Contains("plane")) return "cutting-plane";
+        if(s.Contains("knapsack")) return "knapsack";
         return s;
     }
 
@@ -136,6 +137,7 @@ public partial class MainWindow : Window
             "branch-and-bound" or "branch and bound" or "branch&bound" or
         "bnb" or "b&b" or "branch" => new BranchAndBoundRunner(),
          "cutting-plane" => new CuttingPlaneRunner(),
+            "knapsack" => new KnapsackRunner(),
             _ => throw new InvalidOperationException($"Unknown solver key '{key}'.")
         };
     }

@@ -73,6 +73,7 @@
 											<ComboBoxItem Content="Revised Simplex" />
 											<ComboBoxItem Content="Branch &amp; Bound" />
 											<ComboBoxItem Content="Cutting Plane" />
+											<ComboBoxItem Content="Knapsack" />
 										</ComboBox>
 										<!--
 										 Decision variables (optional; not required for parsing) 
