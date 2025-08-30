@@ -1,105 +1,72 @@
 ﻿using LPR381.Core;
+using LPR381.UI.Core;
 using LPR381.UI.Models;
-using LPR381.UI.Util;
-using Microsoft.FSharp.Core;
-using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace LPR381.UI.Solvers
 {
-    public sealed class PrimalSimplexRunner : BaseSolver, ISolverRunner
+    public sealed class PrimalSimplexRunner : SolverRunner
     {
-        private readonly List<IterationTableau> _iters = new();
-        public string Key => "primal-simplex";
-        public string Display => "Primal Simplex";
-        public IReadOnlyList<IterationTableau> Iterations => _iters;
+        public override string Key => "primal-simplex";
+        public override string Display => "Primal Simplex";
 
-        public Task<SolveSummary> RunAsync(UserProblem input)
+        protected override SolveSummary Solve(LPFormulation model)
         {
-            return Task.Run(() =>
+            _iterations.Clear();
+            AddCanonicalForm(model);
+            
+            var root = new PrimalSimplex(model);
+            var summary = new SolveSummary();
+            var stack = new Stack<(ITree<SimplexNode> node, int idx)>();
+            stack.Push((root, 0));
+
+            while (stack.Count > 0)
             {
-                _iters.Clear();
+                var (cur, idx) = stack.Pop();
+                var item = cur.Item;
 
-                LPFormulation model = BuildFormulation(input);
-
-                // Your public F# ctor
-                ITree<SimplexNode> root = new PrimalSimplex(model);
-
-                var summary = new SolveSummary();
-
-                var stack = new Stack<(ITree<SimplexNode> node, int idx)>();
-                stack.Push((root, 0));
-
-                while (stack.Count > 0)
+                var t = item.Tableau;
+                var (stateCase, _) = FSharpInterop.ReadUnion(item.State);
+                var title = stateCase == "Pivot" ? $"Tableau {idx} (Pivot)" : $"Tableau {idx} (Final)";
+                
+                _iterations.Add(new IterationTableau
                 {
-                    var (cur, idx) = stack.Pop();
-                    var item = cur.Item;   // SimplexNode
+                    Title = title,
+                    Columns = t.ColumnNames,
+                    Rows = t.RowNames,
+                    Values = t.Values
+                });
 
-                    // collect tableau snapshot
-                    var t = item.Tableau;  // has ColumnNames, RowNames, Values (double[,])
-                    _iters.Add(new IterationTableau
+                var provider = (ISimplexResultProvider)item;
+                if (FSharpInterop.TrySome(provider.SimplexResult, out var res))
+                {
+                    var (caseName, fields) = FSharpInterop.ReadUnion(res);
+                    switch (caseName)
                     {
-                        Title = $"Iter {idx}",
-                        Columns = t.ColumnNames,
-                        Rows = t.RowNames,
-                        Values = t.Values
-                    });
-
-                    // ----- FIXED: C# pattern-match over F# option + DU -----
-                    var provider = (ISimplexResultProvider)item;
-                    var maybe = provider.SimplexResult;  // FSharpOption<SimplexResult>
-                    if (FSharpDu.TrySome(maybe, out var res))
-                    {
-                        var (caseName, fields) = FSharpDu.ReadUnion(res);
-
-                        switch (caseName)
-                        {
-                            case "Optimal":
-                                // fields: [canonVars; formVars; z]
-                                var formVars = FSharpDu.ToDict(fields[1]);
-                                var z = (double)fields[2];
-
-                                summary.IsOptimal = true;
-                                summary.Objective = z;
-                                summary.VariableValues = formVars;
-                                summary.Message = "Optimal solution found.";
-                                break;
-
-                            case "Unbounded":
-                                // fields: [varName]
-                                var varName = (string)fields[0];
-                                summary.IsOptimal = false;
-                                summary.Message = $"Unbounded (variable {varName}).";
-                                break;
-
-                            case "Infeasible":
-                                // fields: [stopRow] (int or string depending on your DU)
-                                summary.IsOptimal = false;
-                                summary.Message = $"Infeasible (stopping constraint row {fields[0]}).";
-                                break;
-
-                            default:
-                                summary.IsOptimal = false;
-                                summary.Message = $"Result: {caseName}";
-                                break;
-                        }
+                        case "Optimal":
+                            summary.IsOptimal = true;
+                            summary.Objective = (double)fields[2];
+                            summary.VariableValues = FSharpInterop.ToDict(fields[1]);
+                            summary.Message = "Optimal solution found.";
+                            break;
+                        case "Unbounded":
+                            summary.Message = $"Unbounded (variable {fields[0]}).";
+                            break;
+                        case "Infeasible":
+                            summary.Message = $"Infeasible (constraint {fields[0]}).";
+                            break;
+                        default:
+                            summary.Message = $"Result: {caseName}";
+                            break;
                     }
-                    // ---------------------------------------------
-
-                    // traverse children
-                    var children = cur.Children; // ITree<SimplexNode>[]
-                    for (int i = children.Length - 1; i >= 0; --i)
-                        stack.Push((children[i], idx + 1));
                 }
 
-                if (string.IsNullOrEmpty(summary.Message))
-                    summary.Message = "No result produced.";
+                var children = cur.Children;
+                for (int i = children.Length - 1; i >= 0; --i)
+                    stack.Push((children[i], idx + 1));
+            }
 
-                return summary;
-            });
+            return summary;
         }
     }
 }

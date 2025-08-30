@@ -1,9 +1,5 @@
-﻿using LPR381.Core;
-using LPR381.UI.Models;
-using System;
+﻿using LPR381.UI.Models;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace LPR381.UI.Solvers
@@ -12,7 +8,7 @@ namespace LPR381.UI.Solvers
     {
         public bool IsOptimal { get; set; }
         public double Objective { get; set; }
-        public IDictionary<string, double> VariableValues { get; set; } = new Dictionary<string, double>();
+        public Dictionary<string, double> VariableValues { get; set; } = new();
         public string Message { get; set; } = "";
     }
 
@@ -20,12 +16,7 @@ namespace LPR381.UI.Solvers
     {
         string Key { get; }
         string Display { get; }
-
-        /// Populated after RunAsync: used to fill the Iterations tab.
         IReadOnlyList<IterationTableau> Iterations { get; }
-
-        /// Takes raw UI lines, builds an LPFormulation using existing F# parsers,
-        /// runs the solver, fills Iterations, and returns a summary.
         Task<SolveSummary> RunAsync(UserProblem input);
     }
 }

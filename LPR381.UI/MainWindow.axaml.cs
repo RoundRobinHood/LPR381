@@ -20,67 +20,65 @@ namespace LPR381.UI;
 
 public partial class MainWindow : Window
 {
+    private TextBox? _outputBox;
+    private TextBox? _iterationsBox;
+    private TextBox? _objBox;
+    private StackPanel? _panel;
+    private ComboBox? _algoCombo;
 
     public MainWindow()
     {
         InitializeComponent();
+        CacheControls();
+    }
+
+    private void CacheControls()
+    {
+        _outputBox = this.FindControl<TextBox>("OutputBox");
+        _iterationsBox = this.FindControl<TextBox>("IterationsBox");
+        _objBox = this.FindControl<TextBox>("ObjectiveTextBox");
+        _panel = this.FindControl<StackPanel>("ConstraintsPanel");
+        _algoCombo = this.FindControl<ComboBox>("AlgorithmCombo");
     }
 
     private async void SubmitButton_Click(object? sender, RoutedEventArgs e) => await Solve();
 
     private async Task Solve()
     {
-        var outputBox = this.FindControl<TextBox>("OutputBox");
-        var iterationsBox = this.FindControl<TextBox>("IterationsBox");
-        var objBox = this.FindControl<TextBox>("ObjectiveTextBox");
-        var panel = this.FindControl<StackPanel>("ConstraintsPanel");
-        var algoCombo = this.FindControl<ComboBox>("AlgorithmCombo");
-
-        if (outputBox != null) outputBox.Text = "";
-        if (iterationsBox != null) iterationsBox.Text = "";
+        if (_outputBox != null) _outputBox.Text = "";
+        if (_iterationsBox != null) _iterationsBox.Text = "";
 
         try
         {
-            if (objBox == null || panel == null || algoCombo == null)
+            if (_objBox == null || _panel == null || _algoCombo == null)
             {
-                if (outputBox != null) outputBox.Text = "UI not ready (missing controls).";
+                if (_outputBox != null) _outputBox.Text = "UI not ready.";
                 return;
             }
 
-            // Build UserProblem from UI
             var input = new UserProblem
             {
-                ObjectiveLine = objBox.Text ?? "",
-                Constraints = ReadConstraintLines(panel),
-                DecisionVariablesLine = null // keep simple for now
+                ObjectiveLine = _objBox.Text ?? "",
+                Constraints = ReadConstraintLines(_panel)
             };
 
-            // Pick runner from combo (supports Registry.Entry, ComboBoxItem.Tag, or text)
-            var runner = CreateRunnerFromCombo(algoCombo);
+            var runner = CreateRunnerFromCombo(_algoCombo);
 
             // Run
             var summary = await runner.RunAsync(input);
 
-            // Show iterations
-            if (iterationsBox != null)
-            {
-                iterationsBox.Text = string.Join(
-                    Environment.NewLine + Environment.NewLine,
-                    runner.Iterations.Select(IterationFormat.Pretty));
-            }
+            if (_iterationsBox != null)
+                _iterationsBox.Text = string.Join("\n\n", runner.Iterations.Select(IterationFormat.Pretty));
 
-            // Show final result
-            if (outputBox != null)
+            if (_outputBox != null)
             {
-                outputBox.Text =
-                    $"{summary.Message}{Environment.NewLine}" +
-                    $"Objective = {summary.Objective}{Environment.NewLine}" +
-                    string.Join(Environment.NewLine, summary.VariableValues.Select(kv => $"{kv.Key} = {kv.Value}"));
+                _outputBox.Text = $"{summary.Message}\nObjective = {summary.Objective}\n" +
+                    string.Join("\n", summary.VariableValues.Select(kv => $"{kv.Key} = {kv.Value}"));
             }
         }
         catch (Exception ex)
         {
-            if (outputBox != null) outputBox.Text = "Error: " + ex.Message;
+            if (_outputBox != null) _outputBox.Text = "Error: " + ex.Message;
         }
     }
 
