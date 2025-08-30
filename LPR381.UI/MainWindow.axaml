@@ -4,6 +4,193 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
         x:Class="LPR381.UI.MainWindow"
-        Title="LPR381.UI">
-    Welcome to Avalonia!
+        Title="Linear &amp; Integer Programming Solver">
+	<DockPanel>
+		<!-- Main Content -->
+		<TabControl Margin="10">
+			<!-- Home Tab -->
+			<TabItem Header="Home">
+				<ScrollViewer>
+					<StackPanel Margin="20,50,0,0"  Spacing="20">
+
+						<!-- Heading Section -->
+						<Border Background="#1b1b1b" CornerRadius="10" Padding="20" Margin="0,0,0,20">
+							<StackPanel>
+								<TextBlock Text="Linear &amp; Integer Programming Solver"
+										   Foreground="White"
+										   FontSize="24"
+										   FontWeight="Bold"
+										   TextAlignment="Center"/>
+								<TextBlock Text="Formulate • Solve • Analyze"
+										   Foreground="Gray"
+										   FontSize="14"
+										   TextAlignment="Center"
+										   Margin="0,5,0,0"/>
+							</StackPanel>
+						</Border>
+
+						<!-- Description Section -->
+						<Border Background="#1b1b1b" CornerRadius="10" Padding="20">
+							<StackPanel>
+								<TextBlock Text="Easily work with Linear &amp; Integer Programming problems in one place."
+										   Foreground="White"
+										   FontSize="16"
+										   TextWrapping="Wrap"
+										   TextAlignment="Center"
+										   Margin="0,0,0,10"/>
+
+								<TextBlock Text="Features:"
+										   Foreground="White"
+										   FontSize="14"
+										   FontWeight="SemiBold"
+										   Margin="0,0,0,10"/>
+
+								<StackPanel Margin="20,0,0,35">
+									<TextBlock Text="• Manual &amp; file-based problem input" Foreground="Gray" FontSize="13"/>
+									<TextBlock Text="• Algorithms: Simplex, Branch &amp; Bound, Knapsack, Cutting Plane" Foreground="Gray" FontSize="13"/>
+									<TextBlock Text="• Sensitivity analysis tools" Foreground="Gray" FontSize="13"/>
+								</StackPanel>
+							</StackPanel>
+						</Border>
+					</StackPanel>
+				</ScrollViewer>
+			</TabItem>
+
+			<!-- Problem Formulation Tab -->
+			<TabItem Header="Problem Formulation">
+				<TabControl Margin="10">
+					<!-- Problem Formulation Tab -> Manual Input -->
+					<TabItem Header="Manual Input">
+						<ScrollViewer>
+							<StackPanel Margin="10">
+								<Border BorderThickness="2" CornerRadius="8" Background="#1b1b1b" Padding="10">
+									<StackPanel>
+
+										<!-- Algorithm Selection -->
+										<TextBlock Text="Select Algorithm" FontWeight="Bold" Margin="0,10,0,5"/>
+										<ComboBox x:Name="AlgorithmCombo" Width="200" Margin="0,3" />
+										<!--
+										 Decision variables (optional; not required for parsing) 
+										<TextBlock Text="Decision Variables (optional, e.g. x1, x2, x3)" Margin="0,10,0,5"/>
+										<StackPanel Orientation="Horizontal" Margin="0,5">
+											<TextBox x:Name="DecisionVariablesBox" Width="400"/>
+										</StackPanel>
+										-->
+
+										<!-- Objective -->
+										<TextBlock Text="Objective Function" FontWeight="Bold" Margin="0,10,0,5"/>
+										<StackPanel Orientation="Horizontal" Margin="0,5">
+											<ComboBox x:Name="ObjectiveTypeCombo" Width="100">
+												<ComboBoxItem Content="Max" IsSelected="True"/>
+												<ComboBoxItem Content="Min"/>
+											</ComboBox>
+											<TextBox x:Name="ObjectiveTextBox" Width="400" Watermark="e.g. 3x1 + 2x2 + 5x3" Margin="10,0"/>
+										</StackPanel>
+
+										<!-- Variable Type restriction -->
+										<TextBlock Text="Variable Type" FontWeight="Bold" Margin="0,10,0,5"/>
+										<ComboBox x:Name="VariableTypeCombo" Width="200" Margin="0,3" SelectedIndex="0">
+											<ComboBoxItem Content="Continuous" Tag="continuous"/>
+											<ComboBoxItem Content="Integer" Tag="integer"/>
+											<ComboBoxItem Content="Binary" Tag="binary"/>
+										</ComboBox>
+										
+										<!-- Solver Compatibility Info -->
+										<TextBlock x:Name="SolverInfoText" Text="" Foreground="Orange" FontSize="12" Margin="0,5" TextWrapping="Wrap"/>
+
+										<!-- Constraints -->
+										<TextBlock Text="Constraints" FontWeight="Bold" Margin="0,10,0,5"/>
+										<StackPanel x:Name="ConstraintsPanel">
+											<!-- one starter row -->
+											<StackPanel Orientation="Horizontal" Margin="0,5">
+												<TextBox Width="250" Watermark="Coefficients e.g. 2x1 + 3x2"/>
+												<ComboBox Width="70" Margin="5,0">
+													<ComboBoxItem Content="&lt;=" IsSelected="True"/>
+													<ComboBoxItem Content="&gt;="/>
+													<ComboBoxItem Content="="/>
+												</ComboBox>
+												<TextBox Width="80" Watermark="RHS"/>
+											</StackPanel>
+										</StackPanel>
+
+										<StackPanel Orientation="Horizontal" Spacing="8" Margin="0,10">
+											<Button x:Name="AddConstraintButton"
+													Content="Add Constraint Row"
+													Width="180"
+													Click="AddConstraintButton_Click"/>
+											<Button x:Name="SubmitButton"
+													Content="Submit"
+													Width="150"
+													Click="SubmitButton_Click"/>
+											<Button x:Name="ExportButton"
+													Content="Export Results"
+													Width="150"
+													Click="ExportButton_Click"/>
+										</StackPanel>
+
+										<!-- Simple output area -->
+										<TextBlock Text="Result" FontWeight="Bold" Margin="0,10,0,5"/>
+										<TextBox x:Name="OutputBox"
+												 IsReadOnly="True"
+												 AcceptsReturn="True"
+												 TextWrapping="Wrap"
+												 Height="180"/>
+									</StackPanel>
+								</Border>
+							</StackPanel>
+						</ScrollViewer>
+					</TabItem>
+
+
+					<!-- File Input -->
+					<TabItem Header="File Input">
+						<ScrollViewer>
+							<StackPanel Margin="10">
+								<Border BorderThickness="2" CornerRadius="8" Background="#1b1b1b" Padding="10">
+									<StackPanel>
+										<!-- Algorithm Selection -->
+										<TextBlock Text="Select Algorithm" FontWeight="Bold" Margin="0,10,0,5"/>
+										<ComboBox x:Name="FileAlgorithmCombo" Width="200" />
+										<!-- Load File -->
+										<TextBlock Text="Load LP Model From File" FontWeight="Bold" Margin="0,10,0,5"/>
+										<Button Content="Select File..." Width="150" Margin="0,10" Click="UploadFileButton_Click"/>
+										<TextBox x:Name="FileContentTextBox" AcceptsReturn="True" Height="200" Watermark="File preview will appear here." IsReadOnly="True"/>
+										<StackPanel>
+											<Button x:Name="FileSubmitButton" Content="Submit" Width="150" Margin="0,10" Click="FileSubmitButton_Click" />
+										</StackPanel>
+										<!-- Canonical Form -->
+										<Button Content="Preview Canonical Form" Width="200" Margin="0,10"/>
+										<TextBox AcceptsReturn="True" Height="150" Watermark="Canonical form will appear here"/>
+									</StackPanel>
+								</Border>
+							</StackPanel>
+						</ScrollViewer>
+					</TabItem>
+				</TabControl>
+			</TabItem>
+
+			<!-- Iterations Tab -->
+			<TabItem Header="Iterations">
+				<ScrollViewer>
+					<TextBox x:Name="IterationsBox"
+							 IsReadOnly="True"
+							 AcceptsReturn="True"
+							 TextWrapping="NoWrap"
+							 FontFamily="Consolas, Courier New, monospace"
+							 Height="600"/>
+				</ScrollViewer>
+			</TabItem>
+
+			<!-- Solution Tab -->
+			<TabItem Header="Solution">
+				<StackPanel Margin="10">
+					<TextBlock Text="Optimal Solution" FontWeight="Bold" Margin="0,0,0,10"/>
+					<TextBox AcceptsReturn="True" Height="200" IsReadOnly="True"
+							 Watermark="Final solution (z value and variables)"/>
+					<TextBlock Text="Sensitivity Analysis " FontWeight="Bold"/>
+				</StackPanel>
+			</TabItem>
+			
+		</TabControl>
+	</DockPanel>
 </Window>
