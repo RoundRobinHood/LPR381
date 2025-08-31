@@ -362,8 +362,49 @@ type RevisedDualSimplex(item: RevisedSimplexNode, formulation: LPFormulation)=
     let basis = [| canon.Objective.Count - canon.RHS.Count .. canon.Objective.Count - 1 |]
     RevisedDualSimplex(node(basis, canon, Matrix<double>.Build.DenseIdentity basis.Length, formulation), formulation)
 
-  new(formulation: LPFormulation, canon: LPCanonical, basis: int[], bInverse: Matrix<double>)=
-    RevisedDualSimplex(node (basis, canon, bInverse, formulation), formulation)
+  internal new(formulation: LPFormulation, canon: LPCanonical, basis: int array, bInverse: Matrix<double>)=
+    RevisedDualSimplex(node(basis, canon, bInverse, formulation), formulation)
+
+  new(formulation: LPFormulation, basis: int array)=
+    let canon = formulation.ToLPCanonical()
+    if basis.Length <> canon.RHS.Count then invalidArg "basis" "Basis is the wrong size"
+    let b = basis |> Array.map canon.ConstraintMatrix.Column |> Matrix<double>.Build.DenseOfColumnVectors
+    let bInverse = b.Inverse()
+
+    RevisedDualSimplex(node(basis, canon, bInverse, formulation), formulation)
+
+  new(context: RelaxedSimplexSensitivityContext)=
+    if context = null then invalidArg "context" "Context is null"
+
+    RevisedDualSimplex(context.Formulation, context.Basis)
+
+  member _.WithFormulationRHSUpdate (row: int) (newValue: double) =
+    let new_formulation = formulation.WithRHSUpdate row newValue
+
+    RevisedDualSimplex(new_formulation, item.basis)
+
+  member _.WithFormulationObjectiveUpdate (column: int) (newValue: double) =
+    let new_formulation = formulation.WithObjectiveUpdate column newValue
+
+    RevisedDualSimplex(new_formulation, item.basis)
+
+  member _.WithActivity(variableName: string) (objectiveCoeff: double) (coeffColumn: double array) (signRestriction: SignRestriction) =
+    let new_formulation = formulation.WithActivity variableName objectiveCoeff coeffColumn signRestriction
+
+    RevisedDualSimplex(new_formulation, item.basis)
+
+  member _.WithConstraint(constr: LPConstraint) =
+    let new_formulation = formulation.WithConstraint constr
+    
+    let basis =
+      match constr.ConstraintSign with
+      | ConstraintSign.LessOrEqual | ConstraintSign.GreaterOrEqual ->
+        Array.append item.basis [| item.canon.Objective.Count |]
+      | ConstraintSign.Equal ->
+        Array.append item.basis [| item.canon.Objective.Count ; item.canon.Objective.Count + 1 |]
+      | _ -> failwith "Invalid constraint sign"
+
+    RevisedDualSimplex(new_formulation, basis)
 
   interface ITree<RevisedSimplexNode> with
     member _.Item = item
