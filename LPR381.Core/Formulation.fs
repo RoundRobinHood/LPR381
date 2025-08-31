@@ -49,8 +49,24 @@ module Parsing=
       else
 
       let coefficientStr = input.[i..] |> Seq.takeWhile (fun c -> Char.IsDigit c || c = '.' || c = '-') |> Seq.toArray |> String
+      
+      // Check for comma in coefficient which indicates wrong decimal separator
+      let nextChar = if i + coefficientStr.Length < input.Length then Some input.[i + coefficientStr.Length] else None
+      if nextChar = Some ',' then
+        failwithf "Invalid decimal format. Use period (.) for decimals, not comma (,). Found comma after '%s'" coefficientStr
 
-      let coefficient = if coefficientStr.Length = 0 then sign else sign * Double.Parse(coefficientStr, CultureInfo.InvariantCulture)
+      let coefficient = 
+        if coefficientStr.Length = 0 then 
+          sign 
+        else 
+          try
+            sign * Double.Parse(coefficientStr, CultureInfo.InvariantCulture)
+          with
+          | :? System.FormatException -> 
+            if coefficientStr.Contains(",") then
+              failwithf "Invalid coefficient '%s'. Use period (.) for decimals, not comma (,)" coefficientStr
+            else
+              failwithf "Invalid coefficient format '%s'" coefficientStr
 
       let i = skipWhitespace (i + coefficientStr.Length)
       if i >= input.Length then failwith "Missing variable name"
@@ -280,7 +296,7 @@ type LPFormulation(
     for i in [ 0 .. rhs.Length - 1 ] do
       for j in [ 0 .. varNames.Length ] do
         if j = varNames.Length then
-          newCoeffMatrix.[i,j] <- coeffColumn.[j]
+          newCoeffMatrix.[i,j] <- coeffColumn.[i]
         else
           newCoeffMatrix.[i,j] <- constraintCoefficients.[i,j]
 

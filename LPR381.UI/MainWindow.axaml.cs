@@ -46,11 +46,11 @@ public partial class MainWindow : Window
     private TextBox? _saNewActivityName;
     private TextBox? _saNewActivityObjCoeff;
     private TextBox? _saNewActivityCoeffs;
-    private TextBlock? _saNewActivityStatus;
+    private TextBox? _saAddElementsOutput;
     private TextBox? _saNewConstraintName;
     private TextBox? _saNewConstraintCoeffs;
     private TextBox? _saNewConstraintRhs;
-    private TextBlock? _saNewConstraintStatus;
+    private ComboBox? _saNewConstraintSign;
     private TextBox? _saDualityDisplay;
     private TextBlock? _saDualityStatus;
     private ISolverRunner? _lastRunner;
@@ -89,11 +89,11 @@ public partial class MainWindow : Window
         _saNewActivityName = this.FindControl<TextBox>("SA_NewActivity_Name");
         _saNewActivityObjCoeff = this.FindControl<TextBox>("SA_NewActivity_ObjCoeff");
         _saNewActivityCoeffs = this.FindControl<TextBox>("SA_NewActivity_Coeffs");
-        _saNewActivityStatus = this.FindControl<TextBlock>("SA_NewActivity_Status");
+        _saAddElementsOutput = this.FindControl<TextBox>("SA_AddElements_Output");
         _saNewConstraintName = this.FindControl<TextBox>("SA_NewConstraint_Name");
         _saNewConstraintCoeffs = this.FindControl<TextBox>("SA_NewConstraint_Coeffs");
         _saNewConstraintRhs = this.FindControl<TextBox>("SA_NewConstraint_RHS");
-        _saNewConstraintStatus = this.FindControl<TextBlock>("SA_NewConstraint_Status");
+        _saNewConstraintSign = this.FindControl<ComboBox>("SA_NewConstraint_Sign");
         _saDualityDisplay = this.FindControl<TextBox>("SA_Duality_Display");
         _saDualityStatus = this.FindControl<TextBlock>("SA_Duality_Status");
     }
@@ -506,7 +506,15 @@ public partial class MainWindow : Window
                     var statusText = this.FindControl<TextBlock>("FileStatusText");
                     if (statusText != null)
                     {
-                        statusText.Text = $"Error: {error}";
+                        // Provide helpful error message for decimal format issues
+                        if (error.Contains("Use period (.) for decimals"))
+                        {
+                            statusText.Text = $"❌ {error}";
+                        }
+                        else
+                        {
+                            statusText.Text = $"❌ File parsing error: {error}";
+                        }
                         statusText.Foreground = new SolidColorBrush(Colors.Red);
                     }
                     return;
@@ -528,7 +536,23 @@ public partial class MainWindow : Window
                 var statusText = this.FindControl<TextBlock>("FileStatusText");
                 if (statusText != null)
                 {
-                    statusText.Text = $"Error: {ex.Message}";
+                    // Check for common file issues
+                    if (ex.Message.Contains("Use period (.) for decimals"))
+                    {
+                        statusText.Text = $"❌ {ex.Message}";
+                    }
+                    else if (ex is FileNotFoundException)
+                    {
+                        statusText.Text = "❌ File not found";
+                    }
+                    else if (ex is UnauthorizedAccessException)
+                    {
+                        statusText.Text = "❌ Cannot access file (check permissions)";
+                    }
+                    else
+                    {
+                        statusText.Text = $"❌ Error loading file: {ex.Message}";
+                    }
                     statusText.Foreground = new SolidColorBrush(Colors.Red);
                 }
             }
@@ -547,7 +571,7 @@ public partial class MainWindow : Window
         // Set objective function
         if (_objBox != null)
         {
-            var objTerms = formulation.VarNames.Zip(formulation.Objective, (name, coeff) => $"{coeff:+0.###;-0.###}{name}");
+            var objTerms = formulation.VarNames.Zip(formulation.Objective, (name, coeff) => $"{coeff.ToString("+0.###;-0.###", CultureInfo.InvariantCulture)}{name}");
             _objBox.Text = string.Join(" ", objTerms);
         }
         
@@ -565,7 +589,7 @@ public partial class MainWindow : Window
                 {
                     var coeff = formulation.ConstraintCoefficients[i, j];
                     if (Math.Abs(coeff) > 1e-9)
-                        terms.Add($"{coeff:+0.###;-0.###}{formulation.VarNames[j]}");
+                        terms.Add($"{coeff.ToString("+0.###;-0.###", CultureInfo.InvariantCulture)}{formulation.VarNames[j]}");
                 }
                 var sign = formulation.ConstraintSigns[i] switch
                 {
@@ -574,7 +598,7 @@ public partial class MainWindow : Window
                     _ => "="
                 };
                 
-                AddConstraintRow(string.Join(" ", terms), sign, formulation.RHS[i].ToString());
+                AddConstraintRow(string.Join(" ", terms), sign, formulation.RHS[i].ToString(CultureInfo.InvariantCulture));
             }
         }
         
@@ -709,6 +733,53 @@ public partial class MainWindow : Window
         {
             previewBox.Text = $"Error: {ex.Message}";
         }
+    }
+    
+    private static UserProblem ConvertFormulationToUserProblem(LPFormulation formulation)
+    {
+        // Convert objective
+        var objType = formulation.ObjectiveType == ObjectiveType.Max ? "max" : "min";
+        var objTerms = formulation.VarNames.Zip(formulation.Objective, (name, coeff) => $"{coeff.ToString("+0.###;-0.###", CultureInfo.InvariantCulture)}{name}");
+        var objLine = $"{objType} {string.Join(" ", objTerms)}";
+        
+        // Convert constraints
+        var constraints = new string[formulation.ConstraintSigns.Length];
+        for (int i = 0; i < constraints.Length; i++)
+        {
+            var terms = new List<string>();
+            for (int j = 0; j < formulation.VarNames.Length; j++)
+            {
+                var coeff = formulation.ConstraintCoefficients[i, j];
+                if (Math.Abs(coeff) > 1e-9)
+                    terms.Add($"{coeff.ToString("+0.###;-0.###", CultureInfo.InvariantCulture)}{formulation.VarNames[j]}");
+            }
+            var sign = formulation.ConstraintSigns[i] switch
+            {
+                ConstraintSign.LessOrEqual => "<=",
+                ConstraintSign.GreaterOrEqual => ">=",
+                _ => "="
+            };
+            constraints[i] = $"{string.Join(" ", terms)} {sign} {formulation.RHS[i].ToString(CultureInfo.InvariantCulture)}";
+        }
+        
+        // Convert variable restrictions
+        var signRestrictions = new Dictionary<string, SignRestriction>();
+        var intRestrictions = new Dictionary<string, IntRestriction>();
+        
+        for (int i = 0; i < formulation.VarNames.Length; i++)
+        {
+            signRestrictions[formulation.VarNames[i]] = formulation.VarSignRestrictions[i];
+            intRestrictions[formulation.VarNames[i]] = formulation.VarIntRestrictions[i];
+        }
+        
+        return new UserProblem
+        {
+            ObjectiveLine = objLine,
+            Constraints = constraints,
+            IntMode = "continuous",
+            VariableSignRestrictions = signRestrictions,
+            VariableIntRestrictions = intRestrictions
+        };
     }
     
     private static UserProblem ConvertToUserProblem(LPFormulation formulation)
@@ -1406,15 +1477,323 @@ public partial class MainWindow : Window
     }
     
     // Add New Activity
-    private void SA_NewActivity_Add_Click(object? sender, RoutedEventArgs e)
+    private async void SA_NewActivity_Add_Click(object? sender, RoutedEventArgs e)
     {
-        if (_saNewActivityStatus != null) _saNewActivityStatus.Text = "Add new activity not implemented.";
+        try
+        {
+            var context = GetSensitivityContext();
+            if (context == null)
+            {
+                if (_saAddElementsOutput != null) _saAddElementsOutput.Text = "No solution available for adding activity.";
+                return;
+            }
+            
+            var activityName = _saNewActivityName?.Text?.Trim();
+            var objCoeffText = _saNewActivityObjCoeff?.Text?.Trim();
+            var coeffsText = _saNewActivityCoeffs?.Text?.Trim();
+            
+            if (string.IsNullOrEmpty(activityName) || string.IsNullOrEmpty(objCoeffText) || string.IsNullOrEmpty(coeffsText))
+            {
+                if (_saAddElementsOutput != null) _saAddElementsOutput.Text = "Please fill in all fields.";
+                return;
+            }
+            
+            if (!double.TryParse(objCoeffText, CultureInfo.InvariantCulture, out var objCoeff))
+            {
+                if (_saAddElementsOutput != null) _saAddElementsOutput.Text = "Invalid objective coefficient. Use period (.) for decimals.";
+                return;
+            }
+            
+            var coeffs = coeffsText.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => double.TryParse(s, CultureInfo.InvariantCulture, out var val) ? val : double.NaN)
+                .ToArray();
+                
+            if (coeffs.Any(double.IsNaN))
+            {
+                if (_saAddElementsOutput != null) _saAddElementsOutput.Text = "Invalid coefficients. Use period (.) for decimals and space-separate values.";
+                return;
+            }
+            
+            if (coeffs.Length != context.Formulation.ConstraintSigns.Length)
+            {
+                if (_saAddElementsOutput != null) _saAddElementsOutput.Text = $"Expected {context.Formulation.ConstraintSigns.Length} coefficients (one for each constraint), got {coeffs.Length}.";
+                return;
+            }
+            
+            // Create new formulation with added activity
+            var newFormulation = context.Formulation.WithActivity(activityName, objCoeff, coeffs, SignRestriction.Positive);
+            
+            // Create RevisedPrimalSimplex for new formulation with added activity
+            var newTree = new RevisedPrimalSimplex(newFormulation);
+            var result = Explorer.SolveSimplex(newTree);
+            
+            var sb = new StringBuilder();
+            sb.AppendLine($"NEW ACTIVITY '{activityName}' ADDED:");
+            sb.AppendLine($"Objective coefficient: {objCoeff}");
+            sb.AppendLine($"Constraint coefficients: [{string.Join(", ", coeffs)}]");
+            sb.AppendLine();
+            
+            // Show original solution for comparison
+            if (_lastRunner != null)
+            {
+                var originalInput = GetUserInput();
+                var originalSummary = await _lastRunner.RunAsync(originalInput);
+                sb.AppendLine("ORIGINAL SOLUTION:");
+                sb.AppendLine($"Objective Value: {originalSummary.Objective:F6}");
+                foreach (var kv in originalSummary.VariableValues)
+                {
+                    sb.AppendLine($"{kv.Key} = {kv.Value:F6}");
+                }
+                sb.AppendLine();
+            }
+            
+            sb.AppendLine("NEW SOLUTION (with added activity):");
+            
+            var (resultCase, resultFields) = FSharpInterop.ReadUnion(result);
+            
+            if (resultCase == "Optimal")
+            {
+                var objValue = (double)resultFields[2];
+                var varValues = (Dictionary<string, double>)resultFields[1];
+                
+                sb.AppendLine($"Objective Value: {objValue:F6}");
+                sb.AppendLine("Variable Values:");
+                foreach (var kv in varValues)
+                {
+                    sb.AppendLine($"{kv.Key} = {kv.Value:F6}");
+                }
+                
+                // Add optimal tableau display
+                sb.AppendLine();
+                sb.AppendLine("OPTIMAL TABLEAU:");
+                try
+                {
+                    // Use PrimalSimplexRunner to get complete tableau
+                    var tempRunner = new PrimalSimplexRunner();
+                    var tempInput = ConvertFormulationToUserProblem(newFormulation);
+                    await tempRunner.RunAsync(tempInput);
+                    
+                    if (tempRunner.Iterations.Count > 0)
+                    {
+                        var finalIteration = tempRunner.Iterations.Last();
+                        sb.AppendLine(IterationFormat.Pretty(finalIteration));
+                    }
+                    else
+                    {
+                        sb.AppendLine("No tableau available");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    sb.AppendLine($"Could not generate tableau: {ex.Message}");
+                }
+
+            }
+            else
+            {
+                sb.AppendLine($"Result: {resultCase}");
+            }
+            
+            if (_saAddElementsOutput != null) _saAddElementsOutput.Text = sb.ToString();
+        }
+        catch (Exception ex)
+        {
+            if (_saAddElementsOutput != null) _saAddElementsOutput.Text = $"Error: {ex.Message}";
+        }
     }
     
     // Add New Constraint
-    private void SA_NewConstraint_Add_Click(object? sender, RoutedEventArgs e)
+    private async void SA_NewConstraint_Add_Click(object? sender, RoutedEventArgs e)
     {
-        if (_saNewConstraintStatus != null) _saNewConstraintStatus.Text = "Add new constraint not implemented.";
+        try
+        {
+            var context = GetSensitivityContext();
+            if (context == null)
+            {
+                if (_saAddElementsOutput != null) _saAddElementsOutput.Text = "No solution available for adding constraint.";
+                return;
+            }
+            
+            var constraintName = _saNewConstraintName?.Text?.Trim();
+            var coeffsText = _saNewConstraintCoeffs?.Text?.Trim();
+            var rhsText = _saNewConstraintRhs?.Text?.Trim();
+            var signText = (_saNewConstraintSign?.SelectedItem as ComboBoxItem)?.Content?.ToString();
+            
+            if (string.IsNullOrEmpty(constraintName) || string.IsNullOrEmpty(coeffsText) || string.IsNullOrEmpty(rhsText) || string.IsNullOrEmpty(signText))
+            {
+                if (_saAddElementsOutput != null) _saAddElementsOutput.Text = "Please fill in all fields.";
+                return;
+            }
+            
+            if (!double.TryParse(rhsText, CultureInfo.InvariantCulture, out var rhs))
+            {
+                if (_saAddElementsOutput != null) _saAddElementsOutput.Text = "Invalid RHS value. Use period (.) for decimals.";
+                return;
+            }
+            
+            var coeffs = coeffsText.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => double.TryParse(s, CultureInfo.InvariantCulture, out var val) ? val : double.NaN)
+                .ToArray();
+                
+            if (coeffs.Any(double.IsNaN))
+            {
+                if (_saAddElementsOutput != null) _saAddElementsOutput.Text = "Invalid coefficients. Use period (.) for decimals and space-separate values.";
+                return;
+            }
+            
+            if (coeffs.Length != context.Formulation.VarNames.Length)
+            {
+                if (_saAddElementsOutput != null) _saAddElementsOutput.Text = $"Expected {context.Formulation.VarNames.Length} coefficients (one for each variable: {string.Join(", ", context.Formulation.VarNames)}), got {coeffs.Length}.\nExample: For constraint 'x2 <= 5', enter coefficients '0 1 0' (0 for x1, 1 for x2, 0 for x3).";
+                return;
+            }
+            
+            // Parse constraint sign
+            var constraintSign = signText switch
+            {
+                "<=" => ConstraintSign.LessOrEqual,
+                ">=" => ConstraintSign.GreaterOrEqual,
+                "=" => ConstraintSign.Equal,
+                _ => ConstraintSign.LessOrEqual
+            };
+            
+            // Create constraint terms
+            var constraintTerms = context.Formulation.VarNames.Zip(coeffs, (name, coeff) => Tuple.Create(coeff, name)).ToArray();
+            var constraint = new LPConstraint(constraintTerms, constraintSign, rhs);
+            
+            // Create new formulation with added constraint
+            var newFormulation = context.Formulation.WithConstraint(constraint);
+            
+            // Use RevisedDualSimplex to solve the new problem with added constraint
+            var newTree = new RevisedDualSimplex(newFormulation);
+            var result = Explorer.SolveSimplex(newTree);
+            
+            // Parse the F# result
+            var (resultCase, resultFields) = FSharpInterop.ReadUnion(result);
+            
+            bool isOptimal = resultCase == "Optimal";
+            double objectiveValue = 0.0;
+            Dictionary<string, double> variableValues = new Dictionary<string, double>();
+            string resultMessage = resultCase;
+            
+            if (isOptimal)
+            {
+                objectiveValue = (double)resultFields[2];
+                variableValues = (Dictionary<string, double>)resultFields[1];
+            }
+            
+            var sb = new StringBuilder();
+            sb.AppendLine($"NEW CONSTRAINT '{constraintName}' ADDED:");
+            
+            // Display constraint in readable format
+            var constraintDisplay = new List<string>();
+            for (int i = 0; i < context.Formulation.VarNames.Length; i++)
+            {
+                if (Math.Abs(coeffs[i]) > 1e-9)
+                {
+                    var sign = coeffs[i] >= 0 && constraintDisplay.Count > 0 ? " + " : coeffs[i] < 0 ? " - " : "";
+                    var absCoeff = Math.Abs(coeffs[i]);
+                    var coeffStr = absCoeff == 1.0 ? "" : absCoeff.ToString("G3");
+                    constraintDisplay.Add($"{sign}{coeffStr}{context.Formulation.VarNames[i]}");
+                }
+            }
+            if (constraintDisplay.Count == 0) constraintDisplay.Add("0");
+            sb.AppendLine($"Constraint: {string.Join(" ", constraintDisplay)} {signText} {rhs:G3}");
+            sb.AppendLine();
+            
+            // Show original solution for comparison
+            if (_lastRunner != null)
+            {
+                var originalInput = GetUserInput();
+                var originalSummary = await _lastRunner.RunAsync(originalInput);
+                sb.AppendLine("ORIGINAL SOLUTION:");
+                sb.AppendLine($"Objective Value: {originalSummary.Objective:F6}");
+                foreach (var kv in originalSummary.VariableValues)
+                {
+                    sb.AppendLine($"{kv.Key} = {kv.Value:F6}");
+                }
+                sb.AppendLine();
+            }
+            
+            sb.AppendLine("NEW SOLUTION (with added constraint):");
+            
+            if (isOptimal)
+            {
+                sb.AppendLine($"Objective Value: {objectiveValue:F6}");
+                sb.AppendLine("Variable Values:");
+                foreach (var kv in variableValues)
+                {
+                    sb.AppendLine($"{kv.Key} = {kv.Value:F6}");
+                }
+                
+                // Check if constraint is binding
+                var constraintValue = 0.0;
+                for (int i = 0; i < context.Formulation.VarNames.Length; i++)
+                {
+                    if (variableValues.TryGetValue(context.Formulation.VarNames[i], out var varValue))
+                    {
+                        constraintValue += coeffs[i] * varValue;
+                    }
+                }
+                sb.AppendLine();
+                sb.AppendLine($"Constraint evaluation: {constraintValue:F6} {signText} {rhs:F6}");
+                
+                bool isBinding = false;
+                switch (signText)
+                {
+                    case "<=":
+                        isBinding = Math.Abs(constraintValue - rhs) < 1e-6;
+                        break;
+                    case ">=":
+                        isBinding = Math.Abs(constraintValue - rhs) < 1e-6;
+                        break;
+                    case "=":
+                        isBinding = Math.Abs(constraintValue - rhs) < 1e-6;
+                        break;
+                }
+                
+                sb.AppendLine($"Constraint is {(isBinding ? "BINDING (active)" : "NOT BINDING (slack exists)")}");
+                if (!isBinding && signText == "<=")
+                {
+                    sb.AppendLine($"Slack: {rhs - constraintValue:F6}");
+                }
+                
+                // Add optimal tableau display
+                sb.AppendLine();
+                sb.AppendLine("OPTIMAL TABLEAU:");
+                try
+                {
+                    // Use PrimalSimplexRunner to get complete tableau
+                    var tempRunner = new PrimalSimplexRunner();
+                    var tempInput = ConvertFormulationToUserProblem(newFormulation);
+                    await tempRunner.RunAsync(tempInput);
+                    
+                    if (tempRunner.Iterations.Count > 0)
+                    {
+                        var finalIteration = tempRunner.Iterations.Last();
+                        sb.AppendLine(IterationFormat.Pretty(finalIteration));
+                    }
+                    else
+                    {
+                        sb.AppendLine("No tableau available");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    sb.AppendLine($"Could not generate tableau: {ex.Message}");
+                }
+
+            }
+            else
+            {
+                sb.AppendLine($"Result: {resultMessage}");
+            }
+            
+            if (_saAddElementsOutput != null) _saAddElementsOutput.Text = sb.ToString();
+        }
+        catch (Exception ex)
+        {
+            if (_saAddElementsOutput != null) _saAddElementsOutput.Text = $"Error: {ex.Message}";
+        }
     }
     
     // Duality
