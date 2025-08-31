@@ -183,12 +183,203 @@
 
 			<!-- Solution Tab -->
 			<TabItem Header="Solution">
-				<StackPanel Margin="10">
-					<TextBlock Text="Optimal Solution" FontWeight="Bold" Margin="0,0,0,10"/>
-					<TextBox AcceptsReturn="True" Height="200" IsReadOnly="True"
-							 Watermark="Final solution (z value and variables)"/>
-					<TextBlock Text="Sensitivity Analysis " FontWeight="Bold"/>
-				</StackPanel>
+				<TabControl Margin="10">
+					<!-- Summary Tab -->
+					<TabItem Header="Summary">
+						<StackPanel Margin="10">
+							<TextBlock Text="Optimal Solution" FontWeight="Bold" Margin="0,0,0,10"/>
+							<TextBox x:Name="SolutionSummaryBox" AcceptsReturn="True" Height="200" IsReadOnly="True"
+									 Watermark="Final solution (z value and variables)"/>
+						</StackPanel>
+					</TabItem>
+					
+					<!-- Sensitivity Analysis Tab -->
+					<TabItem Header="Sensitivity Analysis">
+						<TabControl Margin="5">
+							
+							<!-- Variable Analysis -->
+							<TabItem Header="Variable Analysis">
+								<ScrollViewer>
+									<StackPanel Margin="10" Spacing="15">
+										
+										<!-- Non-Basic Variables -->
+										<Border BorderBrush="#333" BorderThickness="1" CornerRadius="5" Padding="10">
+											<StackPanel Spacing="8">
+												<TextBlock Text="Non-Basic Variables" FontWeight="Bold" FontSize="14"/>
+												<Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" Margin="0,5">
+													<StackPanel Grid.Column="0" Spacing="5">
+														<TextBlock Text="Select Variable:" FontWeight="SemiBold"/>
+														<ComboBox x:Name="SA_NonBasic_VarSelect" Width="200" PlaceholderText="Choose non-basic variable"/>
+														<StackPanel Orientation="Horizontal" Spacing="10" Margin="0,5">
+															<Button Content="Display Range" Width="120" Click="SA_NonBasic_DisplayRange_Click"/>
+															<TextBox x:Name="SA_NonBasic_NewValue" Width="100" Watermark="New value"/>
+															<Button Content="Apply Change" Width="120" Click="SA_NonBasic_ApplyChange_Click"/>
+														</StackPanel>
+													</StackPanel>
+													<TextBlock x:Name="SA_NonBasic_Status" Grid.Column="1" Margin="20,0,0,0" TextWrapping="Wrap" VerticalAlignment="Top"/>
+												</Grid>
+											</StackPanel>
+										</Border>
+										
+										<!-- Basic Variables -->
+										<Border BorderBrush="#333" BorderThickness="1" CornerRadius="5" Padding="10">
+											<StackPanel Spacing="8">
+												<TextBlock Text="Basic Variables" FontWeight="Bold" FontSize="14"/>
+												<Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" Margin="0,5">
+													<StackPanel Grid.Column="0" Spacing="5">
+														<TextBlock Text="Select Variable:" FontWeight="SemiBold"/>
+														<ComboBox x:Name="SA_Basic_VarSelect" Width="200" PlaceholderText="Choose basic variable"/>
+														<StackPanel Orientation="Horizontal" Spacing="10" Margin="0,5">
+															<Button Content="Display Range" Width="120" Click="SA_Basic_DisplayRange_Click"/>
+															<TextBox x:Name="SA_Basic_NewValue" Width="100" Watermark="New value"/>
+															<Button Content="Apply Change" Width="120" Click="SA_Basic_ApplyChange_Click"/>
+														</StackPanel>
+													</StackPanel>
+													<TextBlock x:Name="SA_Basic_Status" Grid.Column="1" Margin="20,0,0,0" TextWrapping="Wrap" VerticalAlignment="Top"/>
+												</Grid>
+											</StackPanel>
+										</Border>
+										
+										<!-- Non-Basic Variable Column -->
+										<Border BorderBrush="#333" BorderThickness="1" CornerRadius="5" Padding="10">
+											<StackPanel Spacing="8">
+												<TextBlock Text="Non-Basic Variable Column" FontWeight="Bold" FontSize="14"/>
+												<Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" Margin="0,5">
+													<StackPanel Grid.Column="0" Spacing="5">
+														<TextBlock Text="Select Variable:" FontWeight="SemiBold"/>
+														<ComboBox x:Name="SA_Column_VarSelect" Width="200" PlaceholderText="Choose variable"/>
+														<StackPanel Orientation="Horizontal" Spacing="10" Margin="0,5">
+															<Button Content="Display Range" Width="120" Click="SA_Column_DisplayRange_Click"/>
+															<TextBox x:Name="SA_Column_NewValue" Width="100" Watermark="New value"/>
+															<Button Content="Apply Change" Width="120" Click="SA_Column_ApplyChange_Click"/>
+														</StackPanel>
+													</StackPanel>
+													<TextBlock x:Name="SA_Column_Status" Grid.Column="1" Margin="20,0,0,0" TextWrapping="Wrap" VerticalAlignment="Top"/>
+												</Grid>
+											</StackPanel>
+										</Border>
+										
+									</StackPanel>
+								</ScrollViewer>
+							</TabItem>
+							
+							<!-- Constraint Analysis -->
+							<TabItem Header="Constraint Analysis">
+								<ScrollViewer>
+									<StackPanel Margin="10" Spacing="15">
+										
+										<!-- RHS Analysis -->
+										<Border BorderBrush="#333" BorderThickness="1" CornerRadius="5" Padding="10">
+											<StackPanel Spacing="8">
+												<TextBlock Text="Right-Hand-Side Values" FontWeight="Bold" FontSize="14"/>
+												<Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" Margin="0,5">
+													<StackPanel Grid.Column="0" Spacing="5">
+														<TextBlock Text="Select Constraint:" FontWeight="SemiBold"/>
+														<ComboBox x:Name="SA_RHS_ConstraintSelect" Width="200" PlaceholderText="Choose constraint"/>
+														<StackPanel Orientation="Horizontal" Spacing="10" Margin="0,5">
+															<Button Content="Display Range" Width="120" Click="SA_RHS_DisplayRange_Click"/>
+															<TextBox x:Name="SA_RHS_NewValue" Width="100" Watermark="New RHS"/>
+															<Button Content="Apply Change" Width="120" Click="SA_RHS_ApplyChange_Click"/>
+														</StackPanel>
+													</StackPanel>
+													<TextBlock x:Name="SA_RHS_Status" Grid.Column="1" Margin="20,0,0,0" TextWrapping="Wrap" VerticalAlignment="Top"/>
+												</Grid>
+											</StackPanel>
+										</Border>
+										
+										<!-- Shadow Prices -->
+										<Border BorderBrush="#333" BorderThickness="1" CornerRadius="5" Padding="10">
+											<StackPanel Spacing="8">
+												<TextBlock Text="Shadow Prices" FontWeight="Bold" FontSize="14"/>
+												<Button Content="Display Shadow Prices" Width="200" Click="SA_ShadowPrices_Display_Click" HorizontalAlignment="Left"/>
+												<DataGrid x:Name="SA_ShadowPrices_Grid" HeadersVisibility="Column" AutoGenerateColumns="False" Height="150" x:CompileBindings="False">
+													<DataGrid.Columns>
+														<DataGridTextColumn Header="Constraint" Binding="{Binding Name}"/>
+														<DataGridTextColumn Header="Shadow Price" Binding="{Binding Value, StringFormat=G6}"/>
+														<DataGridTextColumn Header="Interpretation" Binding="{Binding Interpretation}"/>
+													</DataGrid.Columns>
+												</DataGrid>
+											</StackPanel>
+										</Border>
+										
+									</StackPanel>
+								</ScrollViewer>
+							</TabItem>
+							
+							<!-- Add New Elements -->
+							<TabItem Header="Add New Elements">
+								<ScrollViewer>
+									<StackPanel Margin="10" Spacing="15">
+										
+										<!-- Add New Activity -->
+										<Border BorderBrush="#333" BorderThickness="1" CornerRadius="5" Padding="10">
+											<StackPanel Spacing="8">
+												<TextBlock Text="Add New Activity" FontWeight="Bold" FontSize="14"/>
+												<Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,5">
+													<StackPanel Grid.Column="0" Spacing="5">
+														<TextBlock Text="Activity Name:" FontWeight="SemiBold"/>
+														<TextBox x:Name="SA_NewActivity_Name" Width="200" Watermark="e.g., x4"/>
+														<TextBlock Text="Objective Coefficient:" FontWeight="SemiBold"/>
+														<TextBox x:Name="SA_NewActivity_ObjCoeff" Width="200" Watermark="e.g., 5"/>
+														<TextBlock Text="Constraint Coefficients:" FontWeight="SemiBold"/>
+														<TextBox x:Name="SA_NewActivity_Coeffs" Width="300" Watermark="e.g., 2 3 1 (space-separated)"/>
+														<Button Content="Add Activity" Width="150" Click="SA_NewActivity_Add_Click" Margin="0,10,0,0"/>
+													</StackPanel>
+													<TextBlock x:Name="SA_NewActivity_Status" Grid.Column="1" Margin="20,0,0,0" TextWrapping="Wrap" VerticalAlignment="Top"/>
+												</Grid>
+											</StackPanel>
+										</Border>
+										
+										<!-- Add New Constraint -->
+										<Border BorderBrush="#333" BorderThickness="1" CornerRadius="5" Padding="10">
+											<StackPanel Spacing="8">
+												<TextBlock Text="Add New Constraint" FontWeight="Bold" FontSize="14"/>
+												<Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,5">
+													<StackPanel Grid.Column="0" Spacing="5">
+														<TextBlock Text="Constraint Name:" FontWeight="SemiBold"/>
+														<TextBox x:Name="SA_NewConstraint_Name" Width="200" Watermark="e.g., C4"/>
+														<TextBlock Text="Coefficients:" FontWeight="SemiBold"/>
+														<TextBox x:Name="SA_NewConstraint_Coeffs" Width="300" Watermark="e.g., 1 2 3 (space-separated)"/>
+														<TextBlock Text="RHS Value:" FontWeight="SemiBold"/>
+														<TextBox x:Name="SA_NewConstraint_RHS" Width="200" Watermark="e.g., 10"/>
+														<Button Content="Add Constraint" Width="150" Click="SA_NewConstraint_Add_Click" Margin="0,10,0,0"/>
+													</StackPanel>
+													<TextBlock x:Name="SA_NewConstraint_Status" Grid.Column="1" Margin="20,0,0,0" TextWrapping="Wrap" VerticalAlignment="Top"/>
+												</Grid>
+											</StackPanel>
+										</Border>
+										
+									</StackPanel>
+								</ScrollViewer>
+							</TabItem>
+							
+							<!-- Duality -->
+							<TabItem Header="Duality">
+								<ScrollViewer>
+									<StackPanel Margin="10" Spacing="15">
+										
+										<!-- Apply Duality -->
+										<Border BorderBrush="#333" BorderThickness="1" CornerRadius="5" Padding="10">
+											<StackPanel Spacing="8">
+												<TextBlock Text="Dual Problem" FontWeight="Bold" FontSize="14"/>
+												<StackPanel Orientation="Horizontal" Spacing="10" Margin="0,5">
+													<Button Content="Apply Duality" Width="150" Click="SA_Duality_Apply_Click"/>
+													<Button Content="Solve Dual" Width="150" Click="SA_Duality_Solve_Click"/>
+													<Button Content="Verify Duality" Width="150" Click="SA_Duality_Verify_Click"/>
+												</StackPanel>
+												<TextBox x:Name="SA_Duality_Display" AcceptsReturn="True" Height="300" IsReadOnly="True" 
+														 Watermark="Dual problem formulation and results will appear here"/>
+												<TextBlock x:Name="SA_Duality_Status" TextWrapping="Wrap" Margin="0,5,0,0"/>
+											</StackPanel>
+										</Border>
+										
+									</StackPanel>
+								</ScrollViewer>
+							</TabItem>
+							
+						</TabControl>
+					</TabItem>
+				</TabControl>
 			</TabItem>
 			
 		</TabControl>

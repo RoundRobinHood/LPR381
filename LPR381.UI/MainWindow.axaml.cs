@@ -1,5 +1,6 @@
 ﻿using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Media;
 using LPR381.Core;
 using Microsoft.FSharp.Core;
 using System.Linq;
@@ -28,6 +29,33 @@ public partial class MainWindow : Window
     private ComboBox? _algoCombo;
     private ComboBox? _varTypeCombo;
     private TextBlock? _solverInfoText;
+    private TextBox? _solutionSummaryBox;
+    private TextBox? _sensitivityAnalysisBox;
+    
+    // Sensitivity Analysis controls
+    private ComboBox? _saNonBasicVarSelect;
+    private TextBox? _saNonBasicNewValue;
+    private TextBlock? _saNonBasicStatus;
+    private ComboBox? _saBasicVarSelect;
+    private TextBox? _saBasicNewValue;
+    private TextBlock? _saBasicStatus;
+    private ComboBox? _saColumnVarSelect;
+    private TextBox? _saColumnNewValue;
+    private TextBlock? _saColumnStatus;
+    private ComboBox? _saRhsConstraintSelect;
+    private TextBox? _saRhsNewValue;
+    private TextBlock? _saRhsStatus;
+    private DataGrid? _saShadowPricesGrid;
+    private TextBox? _saNewActivityName;
+    private TextBox? _saNewActivityObjCoeff;
+    private TextBox? _saNewActivityCoeffs;
+    private TextBlock? _saNewActivityStatus;
+    private TextBox? _saNewConstraintName;
+    private TextBox? _saNewConstraintCoeffs;
+    private TextBox? _saNewConstraintRhs;
+    private TextBlock? _saNewConstraintStatus;
+    private TextBox? _saDualityDisplay;
+    private TextBlock? _saDualityStatus;
     private ISolverRunner? _lastRunner;
 
     public MainWindow()
@@ -45,6 +73,33 @@ public partial class MainWindow : Window
         _algoCombo = this.FindControl<ComboBox>("AlgorithmCombo");
         _varTypeCombo = this.FindControl<ComboBox>("VariableTypeCombo");
         _solverInfoText = this.FindControl<TextBlock>("SolverInfoText");
+        _solutionSummaryBox = this.FindControl<TextBox>("SolutionSummaryBox");
+        _sensitivityAnalysisBox = this.FindControl<TextBox>("SensitivityAnalysisBox");
+        
+        // Cache sensitivity analysis controls
+        _saNonBasicVarSelect = this.FindControl<ComboBox>("SA_NonBasic_VarSelect");
+        _saNonBasicNewValue = this.FindControl<TextBox>("SA_NonBasic_NewValue");
+        _saNonBasicStatus = this.FindControl<TextBlock>("SA_NonBasic_Status");
+        _saBasicVarSelect = this.FindControl<ComboBox>("SA_Basic_VarSelect");
+        _saBasicNewValue = this.FindControl<TextBox>("SA_Basic_NewValue");
+        _saBasicStatus = this.FindControl<TextBlock>("SA_Basic_Status");
+        _saColumnVarSelect = this.FindControl<ComboBox>("SA_Column_VarSelect");
+        _saColumnNewValue = this.FindControl<TextBox>("SA_Column_NewValue");
+        _saColumnStatus = this.FindControl<TextBlock>("SA_Column_Status");
+        _saRhsConstraintSelect = this.FindControl<ComboBox>("SA_RHS_ConstraintSelect");
+        _saRhsNewValue = this.FindControl<TextBox>("SA_RHS_NewValue");
+        _saRhsStatus = this.FindControl<TextBlock>("SA_RHS_Status");
+        _saShadowPricesGrid = this.FindControl<DataGrid>("SA_ShadowPrices_Grid");
+        _saNewActivityName = this.FindControl<TextBox>("SA_NewActivity_Name");
+        _saNewActivityObjCoeff = this.FindControl<TextBox>("SA_NewActivity_ObjCoeff");
+        _saNewActivityCoeffs = this.FindControl<TextBox>("SA_NewActivity_Coeffs");
+        _saNewActivityStatus = this.FindControl<TextBlock>("SA_NewActivity_Status");
+        _saNewConstraintName = this.FindControl<TextBox>("SA_NewConstraint_Name");
+        _saNewConstraintCoeffs = this.FindControl<TextBox>("SA_NewConstraint_Coeffs");
+        _saNewConstraintRhs = this.FindControl<TextBox>("SA_NewConstraint_RHS");
+        _saNewConstraintStatus = this.FindControl<TextBlock>("SA_NewConstraint_Status");
+        _saDualityDisplay = this.FindControl<TextBox>("SA_Duality_Display");
+        _saDualityStatus = this.FindControl<TextBlock>("SA_Duality_Status");
         
         // Populate algorithm combos from registry
         if (_algoCombo != null)
@@ -110,6 +165,13 @@ public partial class MainWindow : Window
             if (_outputBox != null)
             {
                 _outputBox.Text = $"{summary.Message}\nObjective = {summary.Objective}\n" +
+                    string.Join("\n", summary.VariableValues.Select(kv => $"{kv.Key} = {kv.Value}"));
+            }
+            
+            // Update solution summary tab
+            if (_solutionSummaryBox != null)
+            {
+                _solutionSummaryBox.Text = $"{summary.Message}\n\nObjective Value: {summary.Objective}\n\nVariable Values:\n" +
                     string.Join("\n", summary.VariableValues.Select(kv => $"{kv.Key} = {kv.Value}"));
             }
         }
@@ -367,6 +429,86 @@ public partial class MainWindow : Window
                 if (_outputBox != null) _outputBox.Text += $"\n\nExport failed: {ex.Message}";
             }
         }
+    }
+    
+    // Sensitivity Analysis event handlers
+    
+    // Non-Basic Variables
+    private void SA_NonBasic_DisplayRange_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_saNonBasicStatus != null) _saNonBasicStatus.Text = "Non-basic variable range display not implemented yet.";
+    }
+    
+    private void SA_NonBasic_ApplyChange_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_saNonBasicStatus != null) _saNonBasicStatus.Text = "Non-basic variable change not implemented yet.";
+    }
+    
+    // Basic Variables
+    private void SA_Basic_DisplayRange_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_saBasicStatus != null) _saBasicStatus.Text = "Basic variable range display not implemented yet.";
+    }
+    
+    private void SA_Basic_ApplyChange_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_saBasicStatus != null) _saBasicStatus.Text = "Basic variable change not implemented yet.";
+    }
+    
+    // Non-Basic Variable Column
+    private void SA_Column_DisplayRange_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_saColumnStatus != null) _saColumnStatus.Text = "Variable column range display not implemented yet.";
+    }
+    
+    private void SA_Column_ApplyChange_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_saColumnStatus != null) _saColumnStatus.Text = "Variable column change not implemented yet.";
+    }
+    
+    // RHS Analysis
+    private void SA_RHS_DisplayRange_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_saRhsStatus != null) _saRhsStatus.Text = "RHS range display not implemented yet.";
+    }
+    
+    private void SA_RHS_ApplyChange_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_saRhsStatus != null) _saRhsStatus.Text = "RHS change not implemented yet.";
+    }
+    
+    // Shadow Prices
+    private void SA_ShadowPrices_Display_Click(object? sender, RoutedEventArgs e)
+    {
+        // Display shadow prices in the grid
+    }
+    
+    // Add New Activity
+    private void SA_NewActivity_Add_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_saNewActivityStatus != null) _saNewActivityStatus.Text = "Add new activity not implemented yet.";
+    }
+    
+    // Add New Constraint
+    private void SA_NewConstraint_Add_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_saNewConstraintStatus != null) _saNewConstraintStatus.Text = "Add new constraint not implemented yet.";
+    }
+    
+    // Duality
+    private void SA_Duality_Apply_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_saDualityStatus != null) _saDualityStatus.Text = "Apply duality not implemented yet.";
+    }
+    
+    private void SA_Duality_Solve_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_saDualityStatus != null) _saDualityStatus.Text = "Solve dual problem not implemented yet.";
+    }
+    
+    private void SA_Duality_Verify_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_saDualityStatus != null) _saDualityStatus.Text = "Verify duality not implemented yet.";
     }
 }
 //// --- New lightweight parser for linear expressions like "3x1 - 2x2 + x3" (no LPObjective/LPConstraint) ---
