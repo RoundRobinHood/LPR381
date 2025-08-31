@@ -26,7 +26,7 @@ type SimplexNode =
     member this.SimplexResult =
       match this.State with
       | ResultState s -> Some s
-      | _ -> None
+      | _ -> Option.None
 
 type PrimalSimplex(item: SimplexNode, objectiveType: ObjectiveType, formulation: LPFormulation) =
   static let node(tableau: Tableau, objectiveType: ObjectiveType, formulation: LPFormulation) =
@@ -135,3 +135,37 @@ type PrimalSimplex(item: SimplexNode, objectiveType: ObjectiveType, formulation:
     member _.Item = item
     member _.Children = children.Value
     member _.Formulation = formulation
+    member this.SensitivityContext =
+      let rec solve (itree: ITree<SimplexNode>) =
+        match itree.Item.State with
+        | Pivot _ -> solve itree.Children.[0]
+        | ResultState _ -> itree.Item
+
+      let canon = formulation.ToLPCanonical()
+      let solution = solve (this :> ITree<SimplexNode>)
+      match solution.State with
+      | Pivot _ -> failwith "Unexpected: pivot after solve"
+      | ResultState (Optimal _) ->
+        let basis = Array.init canon.RHS.Count (fun _ -> 0)
+        let rows_grabbed = HashSet<int>()
+        for i in [ 0 .. solution.Tableau.values.ColumnCount - 2 ] do
+          let rec isUnitColumn oneRow j =
+            if j >= solution.Tableau.values.RowCount then
+              oneRow
+            else
+              let value = solution.Tableau.Values.[j, i]
+              if abs value < 1e-9 then
+                isUnitColumn oneRow (j+1)
+              elif abs(value - 1.0) < 1e-9 then
+                if oneRow = -1 then
+                  isUnitColumn j (j + 1)
+                else
+                  -1
+              else
+                -1
+
+          let oneRow = isUnitColumn -1 1
+          if oneRow <> -1 && rows_grabbed.Contains oneRow |> not then
+            basis.[oneRow-1] <- i
+        RelaxedSimplexSensitivityContext(formulation, basis)
+      | ResultState _ -> null

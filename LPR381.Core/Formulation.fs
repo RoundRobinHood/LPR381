@@ -437,18 +437,10 @@ type LPFormulation(
       intRestrictions
     )
 
-type ITree<'T> =
-  abstract member Item: 'T
-  abstract member Children: ITree<'T>[]
-  abstract member Formulation: LPFormulation
-
 type SimplexResult =
   | Optimal of canonicalVars:Dictionary<string, double> * formulationVars:Dictionary<string, double> * objectiveValue:double
   | Unbounded of variableName:string
   | Infeasible of stoppingConstraint:int
-
-type ISimplexResultProvider =
-  abstract member SimplexResult: Option<SimplexResult>
 
 type DualityResult =
   | StrongDuality of primalObjective:double * dualObjective:double

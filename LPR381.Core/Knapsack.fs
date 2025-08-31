@@ -41,7 +41,7 @@ type KnapsackNode =
         member this.SimplexResult = 
             match this.state with
             | ResultState s -> Some s
-            | _ -> None
+            | _ -> Option.None
 
 type KnapsackTree(item: KnapsackNode, formulation: LPFormulation) =
     
@@ -157,3 +157,4 @@ type KnapsackTree(item: KnapsackNode, formulation: LPFormulation) =
         member _.Item = item
         member _.Children = children.Value
         member _.Formulation = formulation
+        member _.SensitivityContext = null

@@ -4,6 +4,9 @@
 
 // adjust paths if your files live in a different folder
 #load "Formulation.fs"
+#load "ResultAnalysis.fs"
+#load "ResultInterfaces.fs"
+#load "PrimalSimplex.fs"
 #load "RevisedSimplex.fs"
 #load "BranchAndBound.fs"
 #load "Explorer.fs"

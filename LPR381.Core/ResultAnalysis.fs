@@ -210,6 +210,7 @@ type CanonicalSensitivityContext (
 
     CanonicalSensitivityContext(canon, basis, B.Inverse())
 
+[<AllowNullLiteral>]
 type RelaxedSimplexSensitivityContext(
   formulation: LPFormulation,
   canon: LPCanonical,
@@ -306,6 +307,7 @@ type RelaxedSimplexSensitivityContext(
   member val Basis = basis
   member val BInverse = bInverse.ToArray()
   member val internal bInverse = bInverse
+  member _.CanonicalContext = canonicalContext
 
   member _.ShadowPrices = shadow_prices.Value
 

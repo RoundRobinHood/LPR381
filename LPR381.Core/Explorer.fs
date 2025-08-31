@@ -8,7 +8,7 @@ module Explorer =
     
     queue.Enqueue tree
 
-    let mutable bestOptimal : Option<SimplexResult> = None
+    let mutable bestOptimal : Option<SimplexResult> = Option.None
     let mutable infeasibleFound = false
     let mutable infeasibleConstraint = -1
 
@@ -17,8 +17,8 @@ module Explorer =
         // Decide final outcome
         match bestOptimal with
         | Some opt -> opt
-        | None when infeasibleFound -> Infeasible infeasibleConstraint
-        | None -> Infeasible -1
+        | Option.None when infeasibleFound -> Infeasible infeasibleConstraint
+        | Option.None -> Infeasible -1
       else
         let node = queue.Dequeue()
 
@@ -28,7 +28,7 @@ module Explorer =
           Unbounded v
         | Some (Optimal (canon, form, obj)) ->
           match bestOptimal with
-          | None -> bestOptimal <- Some (Optimal (canon, form, obj))
+          | Option.None -> bestOptimal <- Some (Optimal (canon, form, obj))
           | Some (Optimal (_, _, bestObj)) ->
               if (if tree.Formulation.ObjectiveType = ObjectiveType.Max then obj > bestObj else obj < bestObj) then
                   bestOptimal <- Some (Optimal (canon, form, obj))
@@ -40,7 +40,7 @@ module Explorer =
           infeasibleConstraint <- constraintNum
           node.Children |> Array.iter queue.Enqueue
           loop ()
-        | None ->
+        | Option.None ->
           node.Children |> Array.iter queue.Enqueue
           loop ()
 
@@ -53,7 +53,7 @@ module Explorer =
 
     let is_better_solution (current: SimplexResult option) (test: SimplexResult) =
       match current with
-      | None -> true
+      | Option.None -> true
       | Some state ->
         match state with
         | Optimal (_, _, objective) ->
@@ -97,9 +97,9 @@ module Explorer =
 
       iterate best_solution nodes
 
-    match solve None [ itree ] with
+    match solve Option.None [ itree ] with
     | Some x -> x
-    | None -> failwith "No simplex result (unexpected)"
+    | Option.None -> failwith "No simplex result (unexpected)"
 
   let PerformSensitivityAnalysis(formulation: LPFormulation) =
     let tree = RevisedDualSimplex formulation

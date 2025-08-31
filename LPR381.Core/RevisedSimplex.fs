@@ -97,7 +97,7 @@ type RevisedSimplexNode=
     member this.SimplexResult = 
       match this.state with
         | ResultState s -> Some s
-        | _ -> None
+        | _ -> Option.None
 
 type RevisedPrimalSimplex(item: RevisedSimplexNode, formulation: LPFormulation)=
   static let node(basis: array<int>, canon: LPCanonical, bInverse: Matrix<double>, formulation: LPFormulation)=
@@ -125,7 +125,7 @@ type RevisedPrimalSimplex(item: RevisedSimplexNode, formulation: LPFormulation)=
         match basis |> Array.tryFindIndex ((=) i) with
         | Some basis_index ->
           var_dict.[readyCanon.VariableNames.[i]] <- x_B.[basis_index]
-        | None ->
+        | Option.None ->
           var_dict.[readyCanon.VariableNames.[i]] <- 0.0
       let objective_value = (basis |> Array.map (fun x -> canon.Objective.[x]) |> Vector.Build.Dense).DotProduct x_B
       {
@@ -189,6 +189,14 @@ type RevisedPrimalSimplex(item: RevisedSimplexNode, formulation: LPFormulation)=
     member _.Item = item
     member _.Children = children.Value
     member _.Formulation = formulation
+    member this.SensitivityContext =
+      let rec solve (itree: ITree<RevisedSimplexNode>) =
+        match itree.Item.state with
+        | Pivot _ -> solve itree.Children.[0]
+        | ResultState _ -> itree.Item
+
+      let solution = solve (this :> ITree<RevisedSimplexNode>)
+      RelaxedSimplexSensitivityContext(formulation, solution.canon, solution.basis, solution.bInverse)
 
 type RevisedDualSimplex(item: RevisedSimplexNode, formulation: LPFormulation)=
   static let node(basis: array<int>, canon: LPCanonical, bInverse: Matrix<double>, formulation: LPFormulation)=
@@ -260,7 +268,7 @@ type RevisedDualSimplex(item: RevisedSimplexNode, formulation: LPFormulation)=
           match basis |> Array.tryFindIndex ((=) i) with
           | Some basis_index ->
             var_dict.[readyCanon.VariableNames.[i]] <- x_B.[basis_index]
-          | None ->
+          | Option.None ->
             var_dict.[readyCanon.VariableNames.[i]] <- 0.0
 
         let objective_value = (basis |> Array.map (fun x -> canon.Objective.[x]) |> Vector.Build.Dense).DotProduct x_B
@@ -327,3 +335,11 @@ type RevisedDualSimplex(item: RevisedSimplexNode, formulation: LPFormulation)=
     member _.Item = item
     member _.Children = children.Value
     member _.Formulation = formulation
+    member this.SensitivityContext =
+      let rec solve (itree: ITree<RevisedSimplexNode>) =
+        match itree.Item.state with
+        | Pivot _ -> solve itree.Children.[0]
+        | ResultState _ -> itree.Item
+
+      let solution = solve (this :> ITree<RevisedSimplexNode>)
+      RelaxedSimplexSensitivityContext(formulation, solution.canon, solution.basis, solution.bInverse)
