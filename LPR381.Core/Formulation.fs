@@ -442,9 +442,6 @@ type SimplexResult =
   | Unbounded of variableName:string
   | Infeasible of stoppingConstraint:int
 
-type ISimplexResultProvider =
-  abstract member SimplexResult: Option<SimplexResult>
-  
 type DualityResult =
   | StrongDuality of primalObjective:double * dualObjective:double
   | WeakDuality of primalObjective:double * dualObjective:double
