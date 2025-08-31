@@ -1117,12 +1117,153 @@ public partial class MainWindow : Window
     
     private void SA_Duality_Solve_Click(object? sender, RoutedEventArgs e)
     {
-        if (_saDualityStatus != null) _saDualityStatus.Text = "Dual solving not implemented.";
+        try
+        {
+            var context = GetSensitivityContext();
+            if (context == null)
+            {
+                if (_saDualityStatus != null) _saDualityStatus.Text = "No solution available for dual solving.";
+                return;
+            }
+
+            // Get the dual formulation
+            var dualFormulation = context.GetDualFormulation().ToLPFormulation();
+            
+            // Solve the dual problem using RevisedDualSimplex
+            var dualTree = new LPR381.Core.RevisedDualSimplex(dualFormulation);
+            var dualResult = LPR381.Core.Explorer.SolveSimplex(dualTree);
+            
+            // Display the dual solution
+            var sb = new StringBuilder();
+            sb.AppendLine("DUAL PROBLEM SOLUTION:");
+            
+            switch (dualResult)
+            {
+                case LPR381.Core.SimplexResult.Optimal optimal:
+                    var canonVars = optimal.canonicalVars;
+                    var formVars = optimal.formulationVars;
+                    var dualObj = optimal.objectiveValue;
+                    sb.AppendLine($"Status: Optimal");
+                    sb.AppendLine($"Dual Objective Value: {dualObj:F6}");
+                    sb.AppendLine("\nDual Variable Values:");
+                    
+                    // Display dual variable values (shadow prices)
+                    for (int i = 0; i < dualFormulation.VarNames.Length; i++)
+                    {
+                        var varName = dualFormulation.VarNames[i];
+                        var varValue = formVars.ContainsKey(varName) ? formVars[varName] : 0.0;
+                        sb.AppendLine($"  {varName} = {varValue:F6}");
+                    }
+                    break;
+                    
+                case LPR381.Core.SimplexResult.Unbounded unbounded:
+                    sb.AppendLine($"Status: Unbounded");
+                    sb.AppendLine($"Unbounded variable: {unbounded}");
+                    break;
+                    
+                case LPR381.Core.SimplexResult.Infeasible infeasible:
+                    sb.AppendLine($"Status: Infeasible");
+                    sb.AppendLine($"Infeasible constraint: {infeasible}");
+                    break;
+            }
+            
+            if (_saDualityDisplay != null) _saDualityDisplay.Text = sb.ToString();
+            if (_saDualityStatus != null) _saDualityStatus.Text = "Dual problem solved successfully.";
+        }
+        catch (Exception ex)
+        {
+            if (_saDualityStatus != null) _saDualityStatus.Text = $"Error solving dual: {ex.Message}";
+            if (_saDualityDisplay != null) _saDualityDisplay.Text = $"Error: {ex.Message}";
+        }
     }
     
     private void SA_Duality_Verify_Click(object? sender, RoutedEventArgs e)
     {
-        if (_saDualityStatus != null) _saDualityStatus.Text = "Duality verification not implemented.";
+        try
+        {
+            var context = GetSensitivityContext();
+            if (context == null)
+            {
+                if (_saDualityStatus != null) _saDualityStatus.Text = "No solution available for duality verification.";
+                return;
+            }
+
+            // Get the primal result from the current context
+            var primalFormulation = context.Formulation;
+            var primalTree = new LPR381.Core.RevisedDualSimplex(primalFormulation);
+            var primalResult = LPR381.Core.Explorer.SolveSimplex(primalTree);
+            
+            // Get and solve the dual problem
+            var dualFormulation = context.GetDualFormulation().ToLPFormulation();
+            var dualTree = new LPR381.Core.RevisedDualSimplex(dualFormulation);
+            var dualResult = LPR381.Core.Explorer.SolveSimplex(dualTree);
+            
+            // Verify duality using the context's verification method
+            var dualityResult = context.VerifyDuality(primalResult, dualResult);
+            
+            // Display the duality verification result
+            var sb = new StringBuilder();
+            sb.AppendLine("DUALITY VERIFICATION RESULTS:");
+            sb.AppendLine("=============================");
+            
+            switch (dualityResult)
+            {
+                case LPR381.Core.DualityResult.StrongDuality strongDuality:
+                    var primalObj = strongDuality.primalObjective;
+                    var dualObj = strongDuality.dualObjective;
+                    sb.AppendLine("✓ STRONG DUALITY CONFIRMED");
+                    sb.AppendLine($"  Primal Objective: {primalObj:F6}");
+                    sb.AppendLine($"  Dual Objective:   {dualObj:F6}");
+                    sb.AppendLine($"  Difference:       {Math.Abs(primalObj - dualObj):E2}");
+                    sb.AppendLine("\nStrong duality means the primal and dual problems");
+                    sb.AppendLine("have the same optimal objective value.");
+                    break;
+                    
+                case LPR381.Core.DualityResult.WeakDuality weakDuality:
+                    var weakPrimalObj = weakDuality.primalObjective;
+                    var weakDualObj = weakDuality.dualObjective;
+                    sb.AppendLine("⚠ WEAK DUALITY DETECTED");
+                    sb.AppendLine($"  Primal Objective: {weakPrimalObj:F6}");
+                    sb.AppendLine($"  Dual Objective:   {weakDualObj:F6}");
+                    sb.AppendLine($"  Difference:       {Math.Abs(weakPrimalObj - weakDualObj):E2}");
+                    sb.AppendLine("\nWeak duality means the primal and dual problems");
+                    sb.AppendLine("have different optimal objective values, but the");
+                    sb.AppendLine("duality gap provides bounds on the solution.");
+                    break;
+                    
+                case LPR381.Core.DualityResult.NoDuality noDuality:
+                    sb.AppendLine("❌ NO DUALITY RELATIONSHIP");
+                    sb.AppendLine($"  Reason: {noDuality}");
+                    sb.AppendLine("\nThis indicates a problem with the formulation");
+                    sb.AppendLine("or the solving process.");
+                    break;
+            }
+            
+            // Add additional analysis
+            sb.AppendLine("\n\nDETAILED ANALYSIS:");
+            sb.AppendLine("------------------");
+            sb.AppendLine($"Primal Problem Status: {GetResultStatus(primalResult)}");
+            sb.AppendLine($"Dual Problem Status:   {GetResultStatus(dualResult)}");
+            
+            if (_saDualityDisplay != null) _saDualityDisplay.Text = sb.ToString();
+            if (_saDualityStatus != null) _saDualityStatus.Text = "Duality verification completed successfully.";
+        }
+        catch (Exception ex)
+        {
+            if (_saDualityStatus != null) _saDualityStatus.Text = $"Error verifying duality: {ex.Message}";
+            if (_saDualityDisplay != null) _saDualityDisplay.Text = $"Error: {ex.Message}";
+        }
+    }
+    
+    private string GetResultStatus(LPR381.Core.SimplexResult result)
+    {
+        return result switch
+        {
+            LPR381.Core.SimplexResult.Optimal => "Optimal",
+            LPR381.Core.SimplexResult.Unbounded => "Unbounded",
+            LPR381.Core.SimplexResult.Infeasible => "Infeasible",
+            _ => "Unknown"
+        };
     }
 }
 //// --- New lightweight parser for linear expressions like "3x1 - 2x2 + x3" (no LPObjective/LPConstraint) ---
