@@ -1079,50 +1079,215 @@ public partial class MainWindow : Window
     }
     
     // Duality
+    private SimplexResult? _primalResult;
+    private SimplexResult? _dualResult;
+    
     private void SA_Duality_Apply_Click(object? sender, RoutedEventArgs e)
     {
-        var context = GetSensitivityContext();
-        if (context == null)
+        try
         {
-            if (_saDualityStatus != null) _saDualityStatus.Text = "No solution available for duality analysis.";
-            return;
-        }
-        
-        var dualFormulation = context.GetDualFormulation().ToLPFormulation();
-        var sb = new StringBuilder();
-        sb.AppendLine("DUAL FORMULATION:");
-        sb.AppendLine($"Objective: {dualFormulation.ObjectiveType}");
-        
-        for (int i = 0; i < dualFormulation.VarNames.Length; i++)
-        {
-            sb.Append($"{dualFormulation.Objective[i]:F3}{dualFormulation.VarNames[i]}");
-            if (i < dualFormulation.VarNames.Length - 1) sb.Append(" + ");
-        }
-        sb.AppendLine();
-        sb.AppendLine("\nConstraints:");
-        
-        for (int i = 0; i < dualFormulation.ConstraintSigns.Length; i++)
-        {
-            for (int j = 0; j < dualFormulation.VarNames.Length; j++)
+            var context = GetSensitivityContext();
+            if (context == null)
             {
-                sb.Append($"{dualFormulation.ConstraintCoefficients[i, j]:F3}{dualFormulation.VarNames[j]}");
-                if (j < dualFormulation.VarNames.Length - 1) sb.Append(" + ");
+                if (_saDualityStatus != null) _saDualityStatus.Text = "No solution available for duality analysis.";
+                return;
             }
-            sb.AppendLine($" {dualFormulation.ConstraintSigns[i]} {dualFormulation.RHS[i]:F3}");
+            
+            var dualFormulation = context.GetDualFormulation().ToLPFormulation();
+            var sb = new StringBuilder();
+            sb.AppendLine("DUAL FORMULATION:");
+            sb.AppendLine($"Objective: {dualFormulation.ObjectiveType}");
+            sb.AppendLine();
+            
+            // Format objective function
+            sb.Append(dualFormulation.ObjectiveType == ObjectiveType.Max ? "Maximize: " : "Minimize: ");
+            for (int i = 0; i < dualFormulation.VarNames.Length; i++)
+            {
+                var coeff = dualFormulation.Objective[i];
+                if (i == 0)
+                    sb.Append($"{coeff:F3}{dualFormulation.VarNames[i]}");
+                else
+                    sb.Append(coeff >= 0 ? $" + {coeff:F3}{dualFormulation.VarNames[i]}" : $" - {Math.Abs(coeff):F3}{dualFormulation.VarNames[i]}");
+            }
+            sb.AppendLine();
+            sb.AppendLine();
+            sb.AppendLine("Subject to:");
+            
+            // Format constraints
+            for (int i = 0; i < dualFormulation.ConstraintSigns.Length; i++)
+            {
+                for (int j = 0; j < dualFormulation.VarNames.Length; j++)
+                {
+                    var coeff = dualFormulation.ConstraintCoefficients[i, j];
+                    if (j == 0)
+                        sb.Append($"{coeff:F3}{dualFormulation.VarNames[j]}");
+                    else
+                        sb.Append(coeff >= 0 ? $" + {coeff:F3}{dualFormulation.VarNames[j]}" : $" - {Math.Abs(coeff):F3}{dualFormulation.VarNames[j]}");
+                }
+                var sign = dualFormulation.ConstraintSigns[i] switch
+                {
+                    ConstraintSign.LessOrEqual => "<=",
+                    ConstraintSign.GreaterOrEqual => ">=",
+                    _ => "="
+                };
+                sb.AppendLine($" {sign} {dualFormulation.RHS[i]:F3}");
+            }
+            
+            if (_saDualityDisplay != null) _saDualityDisplay.Text = sb.ToString();
+            if (_saDualityStatus != null) _saDualityStatus.Text = "Dual formulation generated successfully.";
         }
-        
-        if (_saDualityDisplay != null) _saDualityDisplay.Text = sb.ToString();
-        if (_saDualityStatus != null) _saDualityStatus.Text = "Dual formulation displayed.";
+        catch (Exception ex)
+        {
+            if (_saDualityStatus != null) _saDualityStatus.Text = $"Error generating dual: {ex.Message}";
+        }
     }
     
-    private void SA_Duality_Solve_Click(object? sender, RoutedEventArgs e)
+    private async void SA_Duality_Solve_Click(object? sender, RoutedEventArgs e)
     {
-        if (_saDualityStatus != null) _saDualityStatus.Text = "Dual solving not implemented.";
+        try
+        {
+            var context = GetSensitivityContext();
+            if (context == null)
+            {
+                if (_saDualityStatus != null) _saDualityStatus.Text = "No solution available for dual solving.";
+                return;
+            }
+            
+            // Store primal result from current solution  
+            if (_lastRunner != null && (_lastRunner.Key == "primal-simplex" || _lastRunner.Key == "revised-simplex"))
+            {
+                var primalSummary = await _lastRunner.RunAsync(GetUserInput());
+                _primalResult = primalSummary.IsOptimal ? 
+                    SimplexResult.NewOptimal(new Dictionary<string, double>(), primalSummary.VariableValues, primalSummary.Objective) :
+                    null;
+            }
+            
+            // Use shadow prices as dual solution (optimal dual variables)
+            var shadowPrices = context.ShadowPrices;
+            var dualVariables = new Dictionary<string, double>();
+            var dualObjective = 0.0;
+            
+            for (int i = 0; i < shadowPrices.Length; i++)
+            {
+                var dualVarName = $"y{i + 1}";
+                dualVariables[dualVarName] = shadowPrices[i];
+                dualObjective += context.Formulation.RHS[i] * shadowPrices[i];
+            }
+            
+            _dualResult = SimplexResult.NewOptimal(new Dictionary<string, double>(), dualVariables, dualObjective);
+            
+            var sb = new StringBuilder();
+            sb.AppendLine("DUAL SOLUTION:");
+            sb.AppendLine($"Objective Value: {dualObjective:F6}");
+            sb.AppendLine();
+            sb.AppendLine("Variable Values (Shadow Prices):");
+            foreach (var kv in dualVariables)
+            {
+                sb.AppendLine($"{kv.Key} = {kv.Value:F6}");
+            }
+            
+            if (_saDualityDisplay != null) _saDualityDisplay.Text += "\n\n" + sb.ToString();
+            if (_saDualityStatus != null) _saDualityStatus.Text = "Dual solution obtained from shadow prices.";
+        }
+        catch (Exception ex)
+        {
+            if (_saDualityStatus != null) _saDualityStatus.Text = $"Error solving dual: {ex.Message}";
+        }
     }
     
     private void SA_Duality_Verify_Click(object? sender, RoutedEventArgs e)
     {
-        if (_saDualityStatus != null) _saDualityStatus.Text = "Duality verification not implemented.";
+        try
+        {
+            if (_primalResult == null || _dualResult == null)
+            {
+                if (_saDualityStatus != null) _saDualityStatus.Text = "Please solve both primal and dual problems first.";
+                return;
+            }
+            
+            var context = GetSensitivityContext();
+            if (context == null)
+            {
+                if (_saDualityStatus != null) _saDualityStatus.Text = "No solution available for duality verification.";
+                return;
+            }
+            
+            var dualityResult = context.VerifyDuality(_primalResult, _dualResult);
+            
+            var sb = new StringBuilder();
+            sb.AppendLine("\n\nDUALITY VERIFICATION:");
+            
+            var (dualityCase, dualityFields) = FSharpInterop.ReadUnion(dualityResult);
+            
+            switch (dualityCase)
+            {
+                case "StrongDuality":
+                    var primalObj = (double)dualityFields[0];
+                    var dualObj = (double)dualityFields[1];
+                    sb.AppendLine($"✓ STRONG DUALITY CONFIRMED");
+                    sb.AppendLine($"Primal Objective: {primalObj:F6}");
+                    sb.AppendLine($"Dual Objective: {dualObj:F6}");
+                    sb.AppendLine($"Difference: {Math.Abs(primalObj - dualObj):E6}");
+                    break;
+                    
+                case "WeakDuality":
+                    var primalObjWeak = (double)dualityFields[0];
+                    var dualObjWeak = (double)dualityFields[1];
+                    sb.AppendLine($"⚠ WEAK DUALITY DETECTED");
+                    sb.AppendLine($"Primal Objective: {primalObjWeak:F6}");
+                    sb.AppendLine($"Dual Objective: {dualObjWeak:F6}");
+                    sb.AppendLine($"Gap: {Math.Abs(primalObjWeak - dualObjWeak):F6}");
+                    break;
+                    
+                case "NoDuality":
+                    var reason = (string)dualityFields[0];
+                    sb.AppendLine($"❌ NO DUALITY");
+                    sb.AppendLine($"Reason: {reason}");
+                    break;
+            }
+            
+            if (_saDualityDisplay != null) _saDualityDisplay.Text += sb.ToString();
+            if (_saDualityStatus != null) _saDualityStatus.Text = "Duality verification completed.";
+        }
+        catch (Exception ex)
+        {
+            if (_saDualityStatus != null) _saDualityStatus.Text = $"Error verifying duality: {ex.Message}";
+        }
+    }
+    
+    private string FormatObjective(LPFormulation formulation)
+    {
+        var objType = formulation.ObjectiveType == ObjectiveType.Max ? "max" : "min";
+        var terms = new List<string>();
+        for (int i = 0; i < formulation.VarNames.Length; i++)
+        {
+            var coeff = formulation.Objective[i];
+            terms.Add($"{coeff:+0.###;-0.###}{formulation.VarNames[i]}");
+        }
+        return $"{objType} {string.Join(" ", terms)}";
+    }
+    
+    private string[] FormatConstraints(LPFormulation formulation)
+    {
+        var constraints = new string[formulation.ConstraintSigns.Length];
+        for (int i = 0; i < constraints.Length; i++)
+        {
+            var terms = new List<string>();
+            for (int j = 0; j < formulation.VarNames.Length; j++)
+            {
+                var coeff = formulation.ConstraintCoefficients[i, j];
+                if (Math.Abs(coeff) > 1e-9)
+                    terms.Add($"{coeff:+0.###;-0.###}{formulation.VarNames[j]}");
+            }
+            var sign = formulation.ConstraintSigns[i] switch
+            {
+                ConstraintSign.LessOrEqual => "<=",
+                ConstraintSign.GreaterOrEqual => ">=",
+                _ => "="
+            };
+            constraints[i] = $"{string.Join(" ", terms)} {sign} {formulation.RHS[i]}";
+        }
+        return constraints;
     }
 }
 //// --- New lightweight parser for linear expressions like "3x1 - 2x2 + x3" (no LPObjective/LPConstraint) ---
