@@ -12,18 +12,9 @@ namespace LPR381.UI.Solvers
         public override string Key => isPrimal ? "revised-primal-simplex" : "revised-dual-simplex";
         public override string Display => "Revised Simplex";
 
-        protected override SolveSummary Solve(LPFormulation model)
+        public SolveSummary Solve(string title_prefix, ITree<RevisedSimplexNode> root)
         {
-            _iterations.Clear();
-            AddCanonicalForm(model);
-            
-            var canon = model.ToLPCanonical();
-            ITree<RevisedSimplexNode> root;
-            if(isPrimal) {
-                root = new RevisedPrimalSimplex(model);
-            } else {
-                root = new RevisedDualSimplex(model);
-            }
+            var canon = root.Item.Canon;
             var summary = new SolveSummary();
             var stack = new Stack<(ITree<RevisedSimplexNode> node, int idx)>();
             stack.Push((root, 0));
@@ -34,7 +25,7 @@ namespace LPR381.UI.Solvers
                 var node = cur.Item;
 
                 var (stateCase, stateFields) = FSharpInterop.ReadUnion(node.State);
-                string title = $"Iteration {idx}";
+                string title = $"{title_prefix}Iteration {idx}";
                 if (stateCase == "Pivot") title += " (Pivot)";
                 else if (stateCase == "ResultState") title += " (Final)";
 
@@ -198,6 +189,22 @@ namespace LPR381.UI.Solvers
             }
 
             return summary;
+        }
+
+        protected override SolveSummary Solve(LPFormulation model)
+        {
+            _iterations.Clear();
+            AddCanonicalForm(model);
+            
+            var canon = model.ToLPCanonical();
+            ITree<RevisedSimplexNode> root;
+            if(isPrimal) {
+                root = new RevisedPrimalSimplex(model);
+            } else {
+                root = new RevisedDualSimplex(model);
+            }
+
+            return Solve("", root);
         }
     }
 }

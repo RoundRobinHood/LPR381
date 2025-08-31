@@ -78,6 +78,11 @@ namespace LPR381.UI.Solvers
                     Rows = new[] { "Value" },
                     Values = statusMatrix
                 });
+
+                var gens = new RevisedSimplexRunner(false);
+                gens.Solve($"Node {path} - ", node.Item.RevisedTree);
+                
+                _iterations.AddRange(gens.Iterations);
                 
                 if (stateCase == "ResultState")
                 {
