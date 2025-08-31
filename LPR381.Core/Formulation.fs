@@ -296,7 +296,7 @@ type LPFormulation(
     for i in [ 0 .. rhs.Length - 1 ] do
       for j in [ 0 .. varNames.Length ] do
         if j = varNames.Length then
-          newCoeffMatrix.[i,j] <- coeffColumn.[j]
+          newCoeffMatrix.[i,j] <- coeffColumn.[i]
         else
           newCoeffMatrix.[i,j] <- constraintCoefficients.[i,j]
 

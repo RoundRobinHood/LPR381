@@ -282,8 +282,8 @@
 															<TextBox x:Name="SA_NewActivity_ObjCoeff" Width="250" Watermark="e.g., 5" HorizontalAlignment="Left"/>
 														</StackPanel>
 														<StackPanel Spacing="3">
-															<TextBlock Text="Constraint Coefficients:" FontWeight="SemiBold"/>
-															<TextBox x:Name="SA_NewActivity_Coeffs" Width="350" Watermark="e.g., 2 3 1 (space-separated)" HorizontalAlignment="Left"/>
+															<TextBlock Text="Constraint Coefficients (for each constraint):" FontWeight="SemiBold"/>
+															<TextBox x:Name="SA_NewActivity_Coeffs" Width="350" Watermark="e.g., 2 3 1 (space-separated numbers)" HorizontalAlignment="Left"/>
 														</StackPanel>
 														<Button Content="Add Activity" Width="150" Click="SA_NewActivity_Add_Click" Margin="0,15,0,0" HorizontalAlignment="Left"/>
 													</StackPanel>
@@ -303,12 +303,22 @@
 															<TextBox x:Name="SA_NewConstraint_Name" Width="250" Watermark="e.g., C4" HorizontalAlignment="Left"/>
 														</StackPanel>
 														<StackPanel Spacing="3">
-															<TextBlock Text="Coefficients:" FontWeight="SemiBold"/>
-															<TextBox x:Name="SA_NewConstraint_Coeffs" Width="350" Watermark="e.g., 1 2 3 (space-separated)" HorizontalAlignment="Left"/>
+															<TextBlock Text="Coefficients (for each variable):" FontWeight="SemiBold"/>
+															<TextBox x:Name="SA_NewConstraint_Coeffs" Width="350" Watermark="e.g., 1 2 3 (space-separated numbers)" HorizontalAlignment="Left"/>
 														</StackPanel>
-														<StackPanel Spacing="3">
-															<TextBlock Text="RHS Value:" FontWeight="SemiBold"/>
-															<TextBox x:Name="SA_NewConstraint_RHS" Width="250" Watermark="e.g., 10" HorizontalAlignment="Left"/>
+														<StackPanel Orientation="Horizontal" Spacing="10">
+															<StackPanel Spacing="3">
+																<TextBlock Text="Sign:" FontWeight="SemiBold"/>
+																<ComboBox x:Name="SA_NewConstraint_Sign" Width="80" HorizontalAlignment="Left">
+																	<ComboBoxItem Content="&lt;=" IsSelected="True"/>
+																	<ComboBoxItem Content="&gt;="/>
+																	<ComboBoxItem Content="="/>
+																</ComboBox>
+															</StackPanel>
+															<StackPanel Spacing="3">
+																<TextBlock Text="RHS Value:" FontWeight="SemiBold"/>
+																<TextBox x:Name="SA_NewConstraint_RHS" Width="150" Watermark="e.g., 10" HorizontalAlignment="Left"/>
+															</StackPanel>
 														</StackPanel>
 														<Button Content="Add Constraint" Width="150" Click="SA_NewConstraint_Add_Click" Margin="0,15,0,0" HorizontalAlignment="Left"/>
 													</StackPanel>

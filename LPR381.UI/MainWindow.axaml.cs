@@ -50,6 +50,7 @@ public partial class MainWindow : Window
     private TextBox? _saNewConstraintName;
     private TextBox? _saNewConstraintCoeffs;
     private TextBox? _saNewConstraintRhs;
+    private ComboBox? _saNewConstraintSign;
     private TextBlock? _saNewConstraintStatus;
     private TextBox? _saDualityDisplay;
     private TextBlock? _saDualityStatus;
@@ -93,6 +94,7 @@ public partial class MainWindow : Window
         _saNewConstraintName = this.FindControl<TextBox>("SA_NewConstraint_Name");
         _saNewConstraintCoeffs = this.FindControl<TextBox>("SA_NewConstraint_Coeffs");
         _saNewConstraintRhs = this.FindControl<TextBox>("SA_NewConstraint_RHS");
+        _saNewConstraintSign = this.FindControl<ComboBox>("SA_NewConstraint_Sign");
         _saNewConstraintStatus = this.FindControl<TextBlock>("SA_NewConstraint_Status");
         _saDualityDisplay = this.FindControl<TextBox>("SA_Duality_Display");
         _saDualityStatus = this.FindControl<TextBlock>("SA_Duality_Status");
@@ -735,6 +737,53 @@ public partial class MainWindow : Window
         }
     }
     
+    private static UserProblem ConvertFormulationToUserProblem(LPFormulation formulation)
+    {
+        // Convert objective
+        var objType = formulation.ObjectiveType == ObjectiveType.Max ? "max" : "min";
+        var objTerms = formulation.VarNames.Zip(formulation.Objective, (name, coeff) => $"{coeff.ToString("+0.###;-0.###", CultureInfo.InvariantCulture)}{name}");
+        var objLine = $"{objType} {string.Join(" ", objTerms)}";
+        
+        // Convert constraints
+        var constraints = new string[formulation.ConstraintSigns.Length];
+        for (int i = 0; i < constraints.Length; i++)
+        {
+            var terms = new List<string>();
+            for (int j = 0; j < formulation.VarNames.Length; j++)
+            {
+                var coeff = formulation.ConstraintCoefficients[i, j];
+                if (Math.Abs(coeff) > 1e-9)
+                    terms.Add($"{coeff.ToString("+0.###;-0.###", CultureInfo.InvariantCulture)}{formulation.VarNames[j]}");
+            }
+            var sign = formulation.ConstraintSigns[i] switch
+            {
+                ConstraintSign.LessOrEqual => "<=",
+                ConstraintSign.GreaterOrEqual => ">=",
+                _ => "="
+            };
+            constraints[i] = $"{string.Join(" ", terms)} {sign} {formulation.RHS[i].ToString(CultureInfo.InvariantCulture)}";
+        }
+        
+        // Convert variable restrictions
+        var signRestrictions = new Dictionary<string, SignRestriction>();
+        var intRestrictions = new Dictionary<string, IntRestriction>();
+        
+        for (int i = 0; i < formulation.VarNames.Length; i++)
+        {
+            signRestrictions[formulation.VarNames[i]] = formulation.VarSignRestrictions[i];
+            intRestrictions[formulation.VarNames[i]] = formulation.VarIntRestrictions[i];
+        }
+        
+        return new UserProblem
+        {
+            ObjectiveLine = objLine,
+            Constraints = constraints,
+            IntMode = "continuous",
+            VariableSignRestrictions = signRestrictions,
+            VariableIntRestrictions = intRestrictions
+        };
+    }
+    
     private static UserProblem ConvertToUserProblem(LPFormulation formulation)
     {
         // Convert objective
@@ -1112,33 +1161,33 @@ public partial class MainWindow : Window
                 return;
             }
             
-            if (!double.TryParse(objCoeffText, out var objCoeff))
+            if (!double.TryParse(objCoeffText, CultureInfo.InvariantCulture, out var objCoeff))
             {
-                if (_saNewActivityStatus != null) _saNewActivityStatus.Text = "Invalid objective coefficient.";
+                if (_saNewActivityStatus != null) _saNewActivityStatus.Text = "Invalid objective coefficient. Use period (.) for decimals.";
                 return;
             }
             
             var coeffs = coeffsText.Split(' ', StringSplitOptions.RemoveEmptyEntries)
-                .Select(s => double.TryParse(s, out var val) ? val : double.NaN)
+                .Select(s => double.TryParse(s, CultureInfo.InvariantCulture, out var val) ? val : double.NaN)
                 .ToArray();
                 
             if (coeffs.Any(double.IsNaN))
             {
-                if (_saNewActivityStatus != null) _saNewActivityStatus.Text = "Invalid constraint coefficients.";
+                if (_saNewActivityStatus != null) _saNewActivityStatus.Text = "Invalid coefficients. Use period (.) for decimals and space-separate values.";
                 return;
             }
             
             if (coeffs.Length != context.Formulation.ConstraintSigns.Length)
             {
-                if (_saNewActivityStatus != null) _saNewActivityStatus.Text = $"Expected {context.Formulation.ConstraintSigns.Length} coefficients, got {coeffs.Length}.";
+                if (_saNewActivityStatus != null) _saNewActivityStatus.Text = $"Expected {context.Formulation.ConstraintSigns.Length} coefficients (one for each constraint), got {coeffs.Length}.";
                 return;
             }
             
             // Create new formulation with added activity
             var newFormulation = context.Formulation.WithActivity(activityName, objCoeff, coeffs, SignRestriction.Positive);
             
-            // Create RevisedDualSimplex from sensitivity context with new formulation
-            var newTree = new RevisedDualSimplex(newFormulation);
+            // Create RevisedPrimalSimplex for new formulation with added activity
+            var newTree = new RevisedPrimalSimplex(newFormulation);
             var result = Explorer.SolveSimplex(newTree);
             
             var sb = new StringBuilder();
@@ -1176,7 +1225,7 @@ public partial class MainWindow : Window
     }
     
     // Add New Constraint
-    private void SA_NewConstraint_Add_Click(object? sender, RoutedEventArgs e)
+    private async void SA_NewConstraint_Add_Click(object? sender, RoutedEventArgs e)
     {
         try
         {
@@ -1190,70 +1239,152 @@ public partial class MainWindow : Window
             var constraintName = _saNewConstraintName?.Text?.Trim();
             var coeffsText = _saNewConstraintCoeffs?.Text?.Trim();
             var rhsText = _saNewConstraintRhs?.Text?.Trim();
+            var signText = (_saNewConstraintSign?.SelectedItem as ComboBoxItem)?.Content?.ToString();
             
-            if (string.IsNullOrEmpty(constraintName) || string.IsNullOrEmpty(coeffsText) || string.IsNullOrEmpty(rhsText))
+            if (string.IsNullOrEmpty(constraintName) || string.IsNullOrEmpty(coeffsText) || string.IsNullOrEmpty(rhsText) || string.IsNullOrEmpty(signText))
             {
                 if (_saNewConstraintStatus != null) _saNewConstraintStatus.Text = "Please fill in all fields.";
                 return;
             }
             
-            if (!double.TryParse(rhsText, out var rhs))
+            if (!double.TryParse(rhsText, CultureInfo.InvariantCulture, out var rhs))
             {
-                if (_saNewConstraintStatus != null) _saNewConstraintStatus.Text = "Invalid RHS value.";
+                if (_saNewConstraintStatus != null) _saNewConstraintStatus.Text = "Invalid RHS value. Use period (.) for decimals.";
                 return;
             }
             
             var coeffs = coeffsText.Split(' ', StringSplitOptions.RemoveEmptyEntries)
-                .Select(s => double.TryParse(s, out var val) ? val : double.NaN)
+                .Select(s => double.TryParse(s, CultureInfo.InvariantCulture, out var val) ? val : double.NaN)
                 .ToArray();
                 
             if (coeffs.Any(double.IsNaN))
             {
-                if (_saNewConstraintStatus != null) _saNewConstraintStatus.Text = "Invalid constraint coefficients.";
+                if (_saNewConstraintStatus != null) _saNewConstraintStatus.Text = "Invalid coefficients. Use period (.) for decimals and space-separate values.";
                 return;
             }
             
             if (coeffs.Length != context.Formulation.VarNames.Length)
             {
-                if (_saNewConstraintStatus != null) _saNewConstraintStatus.Text = $"Expected {context.Formulation.VarNames.Length} coefficients, got {coeffs.Length}.";
+                if (_saNewConstraintStatus != null) _saNewConstraintStatus.Text = $"Expected {context.Formulation.VarNames.Length} coefficients (one for each variable: {string.Join(", ", context.Formulation.VarNames)}), got {coeffs.Length}.\nExample: For constraint 'x2 <= 5', enter coefficients '0 1 0' (0 for x1, 1 for x2, 0 for x3).";
                 return;
             }
             
+            // Parse constraint sign
+            var constraintSign = signText switch
+            {
+                "<=" => ConstraintSign.LessOrEqual,
+                ">=" => ConstraintSign.GreaterOrEqual,
+                "=" => ConstraintSign.Equal,
+                _ => ConstraintSign.LessOrEqual
+            };
+            
             // Create constraint terms
             var constraintTerms = context.Formulation.VarNames.Zip(coeffs, (name, coeff) => Tuple.Create(coeff, name)).ToArray();
-            var constraint = new LPConstraint(constraintTerms, ConstraintSign.LessOrEqual, rhs);
+            var constraint = new LPConstraint(constraintTerms, constraintSign, rhs);
             
             // Create new formulation with added constraint
             var newFormulation = context.Formulation.WithConstraint(constraint);
             
-            // Create RevisedDualSimplex from sensitivity context with new formulation
+            // Use RevisedDualSimplex to solve the new problem with added constraint
             var newTree = new RevisedDualSimplex(newFormulation);
             var result = Explorer.SolveSimplex(newTree);
             
-            var sb = new StringBuilder();
-            sb.AppendLine($"NEW CONSTRAINT '{constraintName}' ADDED:");
-            sb.AppendLine($"Coefficients: [{string.Join(", ", coeffs)}]");
-            sb.AppendLine($"RHS: {rhs}");
-            sb.AppendLine();
-            sb.AppendLine("NEW SOLUTION:");
-            
+            // Parse the F# result
             var (resultCase, resultFields) = FSharpInterop.ReadUnion(result);
             
-            if (resultCase == "Optimal")
+            bool isOptimal = resultCase == "Optimal";
+            double objectiveValue = 0.0;
+            Dictionary<string, double> variableValues = new Dictionary<string, double>();
+            string resultMessage = resultCase;
+            
+            if (isOptimal)
             {
-                var objValue = (double)resultFields[2];
-                var varValues = (Dictionary<string, double>)resultFields[1];
-                
-                sb.AppendLine($"Objective Value: {objValue:F6}");
-                sb.AppendLine("Variable Values:");
-                foreach (var kv in varValues)
+                objectiveValue = (double)resultFields[2];
+                variableValues = (Dictionary<string, double>)resultFields[1];
+            }
+            
+            var sb = new StringBuilder();
+            sb.AppendLine($"NEW CONSTRAINT '{constraintName}' ADDED:");
+            
+            // Display constraint in readable format
+            var constraintDisplay = new List<string>();
+            for (int i = 0; i < context.Formulation.VarNames.Length; i++)
+            {
+                if (Math.Abs(coeffs[i]) > 1e-9)
+                {
+                    var sign = coeffs[i] >= 0 && constraintDisplay.Count > 0 ? " + " : coeffs[i] < 0 ? " - " : "";
+                    var absCoeff = Math.Abs(coeffs[i]);
+                    var coeffStr = absCoeff == 1.0 ? "" : absCoeff.ToString("G3");
+                    constraintDisplay.Add($"{sign}{coeffStr}{context.Formulation.VarNames[i]}");
+                }
+            }
+            if (constraintDisplay.Count == 0) constraintDisplay.Add("0");
+            sb.AppendLine($"Constraint: {string.Join(" ", constraintDisplay)} {signText} {rhs:G3}");
+            sb.AppendLine();
+            
+            // Show original solution for comparison
+            if (_lastRunner != null)
+            {
+                var originalInput = GetUserInput();
+                var originalSummary = await _lastRunner.RunAsync(originalInput);
+                sb.AppendLine("ORIGINAL SOLUTION:");
+                sb.AppendLine($"Objective Value: {originalSummary.Objective:F6}");
+                foreach (var kv in originalSummary.VariableValues)
                 {
                     sb.AppendLine($"{kv.Key} = {kv.Value:F6}");
+                }
+                sb.AppendLine();
+            }
+            
+            sb.AppendLine("NEW SOLUTION (with added constraint):");
+            
+            if (isOptimal)
+            {
+                sb.AppendLine($"Objective Value: {objectiveValue:F6}");
+                sb.AppendLine("Variable Values:");
+                foreach (var kv in variableValues)
+                {
+                    sb.AppendLine($"{kv.Key} = {kv.Value:F6}");
+                }
+                
+                // Check if constraint is binding
+                var constraintValue = 0.0;
+                for (int i = 0; i < context.Formulation.VarNames.Length; i++)
+                {
+                    if (variableValues.TryGetValue(context.Formulation.VarNames[i], out var varValue))
+                    {
+                        constraintValue += coeffs[i] * varValue;
+                    }
+                }
+                sb.AppendLine();
+                sb.AppendLine($"Constraint evaluation: {constraintValue:F6} {signText} {rhs:F6}");
+                
+                bool isBinding = false;
+                switch (signText)
+                {
+                    case "<=":
+                        isBinding = Math.Abs(constraintValue - rhs) < 1e-6;
+                        break;
+                    case ">=":
+                        isBinding = Math.Abs(constraintValue - rhs) < 1e-6;
+                        break;
+                    case "=":
+                        isBinding = Math.Abs(constraintValue - rhs) < 1e-6;
+                        break;
+                }
+                
+                sb.AppendLine($"Constraint is {(isBinding ? "BINDING (active)" : "NOT BINDING (slack exists)")}");
+                if (!isBinding && signText == "<=")
+                {
+                    sb.AppendLine($"Slack: {rhs - constraintValue:F6}");
+                }
+                else if (!isBinding && signText == ">=")
+                {
                 }
             }
             else
             {
-                sb.AppendLine($"Result: {resultCase}");
+                sb.AppendLine($"Result: {resultMessage}");
             }
             
             if (_saNewConstraintStatus != null) _saNewConstraintStatus.Text = sb.ToString();
