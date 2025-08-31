@@ -43,7 +43,7 @@ namespace LPR381.UI.Util
                 {
                     var cells = string.Join("   ", Enumerable.Range(0, n).Select(j =>
                     {
-                        var s = double.IsNaN(v[i, j]) ? "" : v[i, j].ToString("0.####");
+                        var s = double.IsNaN(v[i, j]) ? "" : v[i, j].ToString("0.###");
                         return pad(s, colWidths[j + 1]);
                     }));
                     return "   " + pad(rows.Length > i ? rows[i] : "", colWidths[0]) + "   " + cells;

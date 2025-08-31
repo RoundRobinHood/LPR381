@@ -874,7 +874,7 @@ public partial class MainWindow : Window
             for (int i = 0; i < formulation.VarNames.Length; i++)
             {
                 var varName = formulation.VarNames[i];
-                if (basis.Contains(i))
+                if (context.IsInBasis(i))
                     basicVars.Add(varName);
                 else
                     nonBasicVars.Add(varName);
@@ -964,22 +964,24 @@ public partial class MainWindow : Window
     
     private RelaxedSimplexSensitivityContext? GetSensitivityContext()
     {
-        if (_lastRunner?.Key != "primal-simplex" && _lastRunner?.Key != "revised-simplex")
-            return null;
             
         try
         {
+            if(_lastRunner == null) return null;
             var formulation = ((SolverRunner)_lastRunner).BuildFormulation(GetUserInput());
-            
-            if (_lastRunner.Key == "primal-simplex")
-            {
-                var tree = new PrimalSimplex(formulation);
-                return (tree as ITree<SimplexNode>)?.SensitivityContext;
-            }
-            else
-            {
-                var tree = new RevisedDualSimplex(formulation);
-                return (tree as ITree<RevisedSimplexNode>)?.SensitivityContext;
+            switch(_lastRunner?.Key) {
+                case "primal-simplex":
+                    return (new PrimalSimplex(formulation) as ITree<SimplexNode>)?.SensitivityContext;
+                case "revised-primal-simplex":
+                    return (new RevisedPrimalSimplex(formulation) as ITree<RevisedSimplexNode>)?.SensitivityContext;
+                case "revised-dual-simplex":
+                    return (new RevisedDualSimplex(formulation) as ITree<RevisedSimplexNode>)?.SensitivityContext;
+                case "branch-and-bound":
+                    return (new RevisedBranchAndBound(formulation) as ITree<RevisedBNBNode>)?.SensitivityContext;
+                case "cutting-plane":
+                    return (new RevisedCuttingPlanes(formulation) as ITree<RevisedCuttingPlanesNode>)?.SensitivityContext;
+                default:
+                    return null;
             }
         }
         catch
@@ -1872,7 +1874,7 @@ public partial class MainWindow : Window
             }
             
             // Store primal result from current solution  
-            if (_lastRunner != null && (_lastRunner.Key == "primal-simplex" || _lastRunner.Key == "revised-simplex"))
+            if (_lastRunner != null)
             {
                 var primalSummary = await _lastRunner.RunAsync(GetUserInput());
                 _primalResult = primalSummary.IsOptimal ? 

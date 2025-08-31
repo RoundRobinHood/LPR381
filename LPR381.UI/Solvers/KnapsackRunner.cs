@@ -131,18 +131,6 @@ namespace LPR381.UI.Solvers
                 {
                     var fractionalItem = (int)stateFields[0];
                     
-                    // Check if should be fathomed by bound
-                    if (bestSolution.IsOptimal)
-                    {
-                        bool shouldFathom = (model.ObjectiveType == ObjectiveType.Max && totalValue <= bestSolution.Objective) ||
-                                          (model.ObjectiveType == ObjectiveType.Min && totalValue >= bestSolution.Objective);
-                        if (shouldFathom)
-                        {
-                            fathomed = true;
-                            fathomReason = "Bound worse than best candidate";
-                        }
-                    }
-                    
                     if (!fathomed)
                     {
                         // Add children to stack (reverse order for proper traversal)

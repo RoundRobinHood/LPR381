@@ -60,6 +60,10 @@ namespace LPR381.UI.Solvers
                     Rows = rc,
                     Values = binv
                 });
+
+                var gens = new RevisedSimplexRunner(false);
+                gens.Solve($"CP Iteration {iter} - ", item.RevisedTree);
+                _iterations.AddRange(gens.Iterations);
                 
                 // Show current solution
                 var canon = subSolution.Canon;
