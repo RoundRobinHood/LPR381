@@ -326,6 +326,15 @@ type RelaxedSimplexSensitivityContext(
     | Infeasible _, Unbounded _ -> NoDuality "Primal infeasible, dual unbounded"
     | Unbounded _, Infeasible _ -> NoDuality "Primal unbounded, dual infeasible"
     | _ -> NoDuality "Both problems infeasible or other error"
+  
+  member _.IsInBasis variable =
+    let var_names = basis |> Array.map (Array.get canon.VariableNames)
+    let var_name = formulation.VarNames.[variable]
+    match formulation.VarSignRestrictions.[variable] with
+    | SignRestriction.Positive -> Array.exists ((=) var_name) var_names
+    | SignRestriction.Negative -> Array.exists ((=) (sprintf "%s-" var_name)) var_names
+    | SignRestriction.Unrestricted -> Array.exists ((=) (sprintf "%s+" var_name)) var_names || Array.exists ((=) (sprintf "%s-" var_name)) var_names
+    | _ -> failwith "Invalid sign restriction"
 
   member _.RHSRange i =
     let canonicalIndex = getCanonConstraintCount formulation.ConstraintSigns.[0..i-1]
