@@ -286,6 +286,17 @@ type RelaxedSimplexSensitivityContext(
 
   let canonicalContext = CanonicalSensitivityContext(canon, basis, bInverse)
 
+  let shadow_prices = lazy (
+      formulation.ConstraintSigns
+      |> Array.mapi (fun i x -> getCanonConstraintCount formulation.ConstraintSigns.[0..i-1], x)
+      |> Array.map (fun (i, x) -> 
+        match x with
+        | ConstraintSign.LessOrEqual | ConstraintSign.GreaterOrEqual -> canonicalContext.ShadowPrices.[i]
+        | ConstraintSign.Equal -> canonicalContext.ShadowPrices.[i] - canonicalContext.ShadowPrices.[i+1]
+        | _ -> failwith "Invalid constraint sign"
+      )
+    )
+
   do
     if formulation.VarIntRestrictions |> Array.exists ((<>) IntRestriction.Unrestricted) then
       invalidArg "formulation" "Can't do relaxed sensitivity analysis on a problem with int-restricted variables"
@@ -296,9 +307,11 @@ type RelaxedSimplexSensitivityContext(
   member val BInverse = bInverse.ToArray()
   member val internal bInverse = bInverse
 
-  member this.GetDualFormulation() = DualFormulation(formulation)
+  member _.ShadowPrices = shadow_prices.Value
 
-  member this.VerifyDuality(primalResult: SimplexResult, dualResult: SimplexResult) =
+  member _.GetDualFormulation() = DualFormulation formulation
+
+  member _.VerifyDuality(primalResult: SimplexResult, dualResult: SimplexResult) =
     match primalResult, dualResult with
     | Optimal(_, _, primalObj), Optimal(_, _, dualObj) ->
       let tolerance = 1e-6
@@ -559,8 +572,6 @@ type RelaxedSimplexSensitivityContext(
           | _ -> failwith "Invalid constraint sign"
 
         let determinant_difference, DT_diff = if negIsBasic then -determinant_difference, -DT_diff else determinant_difference, DT_diff
-        printfn "determinant_difference: %.2f" determinant_difference
-        printfn "difference matrix: %A" DT_diff
 
         let reduced_cost_delta = canonicalContext.CB * DT_diff * canon.ConstraintMatrix - determinant_difference * canon.Objective
         let rhs_delta = DT_diff * canon.RHS
@@ -582,10 +593,6 @@ type RelaxedSimplexSensitivityContext(
 
         let determC = canonicalContext.ReducedCosts / bInverse.Determinant()
         let determB = canonicalContext.OptimalRHS / bInverse.Determinant()
-        printfn "DetermC: %A" determC
-        printfn "reduced_cost_delta: %A" (reduced_cost_delta.ToArray())
-        printfn "DetermB: %A" determB
-        printfn "rhs_delta: %A" (rhs_delta.ToArray())
 
         for var, coeff in reduced_cost_delta.EnumerateIndexed() do
           if basis |> Array.contains var |> not && coeff <> 0 && var <> canonicalColumn && var <> canonicalColumn + 1 then
