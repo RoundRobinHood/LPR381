@@ -136,6 +136,16 @@
 						</StackPanel>
 					</TabItem>
 					
+					<!-- Iterations Tab -->
+					<TabItem Header="Iterations">
+						<StackPanel Margin="10">
+							<TextBlock Text="Algorithm Steps" FontWeight="Bold" Margin="0,0,0,10"/>
+							<TextBox x:Name="IterationsBox" AcceptsReturn="True" Height="400" IsReadOnly="True"
+									 FontFamily="Consolas, Courier New, monospace"
+									 Watermark="Algorithm iterations will appear here"/>
+						</StackPanel>
+					</TabItem>
+					
 					<!-- Sensitivity Analysis Tab -->
 					<TabItem Header="Sensitivity Analysis">
 						<TabControl Margin="5">

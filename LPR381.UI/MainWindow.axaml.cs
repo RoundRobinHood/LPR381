@@ -17,21 +17,15 @@ using LPR381.UI.Util;
 using LPR381.UI.Core;
 using System.Threading.Tasks;
 using System.IO;
-using Avalonia.Media;
 
 namespace LPR381.UI;
 
 public partial class MainWindow : Window
 {
-    private TextBox? _outputBox;
     private TextBox? _iterationsBox;
     private TextBox? _objBox;
     private StackPanel? _panel;
-    private ComboBox? _algoCombo;
-    private ComboBox? _varTypeCombo;
-    private TextBlock? _solverInfoText;
     private TextBox? _solutionSummaryBox;
-    private TextBox? _sensitivityAnalysisBox;
     
     // Sensitivity Analysis controls
     private ComboBox? _saNonBasicVarSelect;
@@ -58,10 +52,6 @@ public partial class MainWindow : Window
     private TextBox? _saDualityDisplay;
     private TextBlock? _saDualityStatus;
     private ISolverRunner? _lastRunner;
-    private TextBox? _iterationsBox;
-    private TextBox? _objBox;
-    private StackPanel? _panel;
-    private ISolverRunner? _lastRunner;
     private readonly List<RadioButton> _algorithmRadios = new();
 
     public MainWindow()
@@ -73,15 +63,10 @@ public partial class MainWindow : Window
 
     private void CacheControls()
     {
-        _outputBox = this.FindControl<TextBox>("OutputBox");
         _iterationsBox = this.FindControl<TextBox>("IterationsBox");
         _objBox = this.FindControl<TextBox>("ObjectiveTextBox");
         _panel = this.FindControl<StackPanel>("ConstraintsPanel");
-        _algoCombo = this.FindControl<ComboBox>("AlgorithmCombo");
-        _varTypeCombo = this.FindControl<ComboBox>("VariableTypeCombo");
-        _solverInfoText = this.FindControl<TextBlock>("SolverInfoText");
         _solutionSummaryBox = this.FindControl<TextBox>("SolutionSummaryBox");
-        _sensitivityAnalysisBox = this.FindControl<TextBox>("SensitivityAnalysisBox");
         
         // Cache sensitivity analysis controls
         _saNonBasicVarSelect = this.FindControl<ComboBox>("SA_NonBasic_VarSelect");
@@ -107,33 +92,6 @@ public partial class MainWindow : Window
         _saNewConstraintStatus = this.FindControl<TextBlock>("SA_NewConstraint_Status");
         _saDualityDisplay = this.FindControl<TextBox>("SA_Duality_Display");
         _saDualityStatus = this.FindControl<TextBlock>("SA_Duality_Status");
-        
-        // Populate algorithm combos from registry
-        if (_algoCombo != null)
-        {
-            _algoCombo.Items.Clear();
-            foreach (var entry in SolverRegistry.Available)
-            {
-                _algoCombo.Items.Add(new ComboBoxItem { Content = entry.Display, Tag = entry.Key });
-            }
-            _algoCombo.SelectedIndex = 0;
-        }
-        
-        var fileAlgoCombo = this.FindControl<ComboBox>("FileAlgorithmCombo");
-        if (fileAlgoCombo != null)
-        {
-            fileAlgoCombo.Items.Clear();
-            foreach (var entry in SolverRegistry.Available)
-            {
-                fileAlgoCombo.Items.Add(new ComboBoxItem { Content = entry.Display, Tag = entry.Key });
-            }
-            fileAlgoCombo.SelectedIndex = 0;
-        }
-    }
-
-        _iterationsBox = this.FindControl<TextBox>("IterationsBox");
-        _objBox = this.FindControl<TextBox>("ObjectiveTextBox");
-        _panel = this.FindControl<StackPanel>("ConstraintsPanel");
     }
 
     private void SetupAlgorithmRadioButtons()
@@ -162,30 +120,24 @@ public partial class MainWindow : Window
 
     private async Task Solve()
     {
-        if (_outputBox != null) _outputBox.Text = "";
         if (_iterationsBox != null) _iterationsBox.Text = "";
+        if (_solutionSummaryBox != null) _solutionSummaryBox.Text = "";
 
         try
         {
-            if (_objBox == null || _panel == null || _algoCombo == null)
+            if (_objBox == null || _panel == null)
             {
-                if (_outputBox != null) _outputBox.Text = "UI not ready.";
+                if (_solutionSummaryBox != null) _solutionSummaryBox.Text = "UI not ready.";
                 return;
             }
 
-            var input = new UserProblem
-            {
-                ObjectiveLine = _objBox.Text ?? "",
-                Constraints = ReadConstraintLines(_panel),
-                IntMode = GetVariableType()
-            };
-
-            var runner = CreateRunnerFromCombo(_algoCombo);
+            var input = GetUserInput();
+            var runner = GetSelectedRunner();
             
             // Quick validation without building full model
             if (runner.Key == "knapsack" && (input.Constraints?.Length != 1))
             {
-                if (_outputBox != null) _outputBox.Text = "Knapsack requires exactly one constraint";
+                if (_solutionSummaryBox != null) _solutionSummaryBox.Text = "Knapsack requires exactly one constraint";
                 return;
             }
 
@@ -195,57 +147,14 @@ public partial class MainWindow : Window
 
             if (_iterationsBox != null)
                 _iterationsBox.Text = string.Join("\n\n", runner.Iterations.Select(IterationFormat.Pretty));
-
-            if (_outputBox != null)
-            {
-                _outputBox.Text = $"{summary.Message}\nObjective = {summary.Objective}\n" +
-                    string.Join("\n", summary.VariableValues.Select(kv => $"{kv.Key} = {kv.Value}"));
-            }
             
             // Update solution summary tab
             if (_solutionSummaryBox != null)
             {
                 _solutionSummaryBox.Text = $"{summary.Message}\n\nObjective Value: {summary.Objective}\n\nVariable Values:\n" +
                     string.Join("\n", summary.VariableValues.Select(kv => $"{kv.Key} = {kv.Value}"));
-        var summaryBox = this.FindControl<TextBox>("SolutionSummaryBox");
-        var sensitivityBox = this.FindControl<TextBox>("SensitivityBox");
-        if (_iterationsBox != null) _iterationsBox.Text = "";
-        if (summaryBox != null) summaryBox.Text = "";
-        if (sensitivityBox != null) sensitivityBox.Text = "";
-
-        try
-        {
-            var input = GetUserInput();
-            var runner = GetSelectedRunner();
+            }
             
-            // Quick validation
-            if (runner.Key == "knapsack" && (input.Constraints?.Length != 1))
-            {
-                if (summaryBox != null) summaryBox.Text = "Knapsack requires exactly one constraint";
-                return;
-            }
-
-            // Run solver
-            var summary = await runner.RunAsync(input);
-            _lastRunner = runner;
-
-            // Update iterations
-            if (_iterationsBox != null)
-                _iterationsBox.Text = string.Join("\n\n", runner.Iterations.Select(IterationFormat.Pretty));
-
-            // Update summary
-            if (summaryBox != null)
-            {
-                summaryBox.Text = $"{summary.Message}\nObjective = {summary.Objective}\n" +
-                    string.Join("\n", summary.VariableValues.Select(kv => $"{kv.Key} = {kv.Value}"));
-            }
-
-            // TODO: Add sensitivity analysis
-            if (sensitivityBox != null)
-            {
-                sensitivityBox.Text = "Sensitivity analysis will be available here.";
-            }
-
             // Switch to results tab
             var resultsTab = this.FindControl<TabItem>("ResultsTab");
             if (resultsTab?.Parent is TabControl mainTabControl)
@@ -255,19 +164,11 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            if (summaryBox != null) summaryBox.Text = "Error: " + ex.Message;
+            if (_solutionSummaryBox != null) _solutionSummaryBox.Text = "Error: " + ex.Message;
         }
     }
 
     // ===== Helpers =====
-
-    private static ISolverRunner CreateRunnerFromCombo(ComboBox combo)
-    {
-        var selectedIndex = combo.SelectedIndex;
-        if (selectedIndex < 0 || selectedIndex >= SolverRegistry.Available.Count)
-            throw new InvalidOperationException("Please select a solver.");
-        
-        return SolverRegistry.Available[selectedIndex].Factory();
     private UserProblem GetUserInput()
     {
         if (_objBox == null || _panel == null)
@@ -323,12 +224,7 @@ public partial class MainWindow : Window
     }
     
 
-    
-    private string GetVariableType()
-    {
-        if (_varTypeCombo?.SelectedItem is ComboBoxItem item)
-            return item.Tag?.ToString() ?? "continuous";
-        return "continuous";
+
     private void ClearButton_Click(object? sender, RoutedEventArgs e)
     {
         ClearAllInputs();
@@ -450,7 +346,7 @@ public partial class MainWindow : Window
         // delete functionality
         deleteBtn.Click += (s, args) =>
         {
-            ConstraintsPanel.Children.Remove(row);
+            _panel?.Children.Remove(row);
         };
 
         // Add them to row
@@ -460,8 +356,7 @@ public partial class MainWindow : Window
         row.Children.Add(deleteBtn);
 
         // Add row to panel
-        ConstraintsPanel.Children.Add(row);
-        AddConstraintRow();
+        _panel?.Children.Add(row);
     }
 
     private void UpdateVariablesButton_Click(object? sender, RoutedEventArgs e)
@@ -798,7 +693,6 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            if (_outputBox != null) _outputBox.Text = "Error: " + ex.Message;
             previewBox.Text = $"Error: {ex.Message}";
         }
     }
@@ -864,11 +758,11 @@ public partial class MainWindow : Window
             try
             {
                 _lastRunner.ExportToFile(result);
-                if (_outputBox != null) _outputBox.Text += $"\n\nResults exported to: {result}";
+                if (_solutionSummaryBox != null) _solutionSummaryBox.Text += $"\n\nResults exported to: {result}";
             }
             catch (Exception ex)
             {
-                if (_outputBox != null) _outputBox.Text += $"\n\nExport failed: {ex.Message}";
+                if (_solutionSummaryBox != null) _solutionSummaryBox.Text += $"\n\nExport failed: {ex.Message}";
             }
         }
     }
@@ -951,15 +845,6 @@ public partial class MainWindow : Window
     private void SA_Duality_Verify_Click(object? sender, RoutedEventArgs e)
     {
         if (_saDualityStatus != null) _saDualityStatus.Text = "Verify duality not implemented yet.";
-                var summaryBox = this.FindControl<TextBox>("SolutionSummaryBox");
-                if (summaryBox != null) summaryBox.Text += $"\n\nResults exported to: {result}";
-            }
-            catch (Exception ex)
-            {
-                var summaryBox = this.FindControl<TextBox>("SolutionSummaryBox");
-                if (summaryBox != null) summaryBox.Text += $"\n\nExport failed: {ex.Message}";
-            }
-        }
     }
 }
 //// --- New lightweight parser for linear expressions like "3x1 - 2x2 + x3" (no LPObjective/LPConstraint) ---
