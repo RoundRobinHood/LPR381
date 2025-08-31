@@ -26,7 +26,7 @@ namespace LPR381.UI.Core
         
         protected abstract SolveSummary Solve(LPFormulation model);
         
-        protected virtual LPFormulation BuildFormulation(UserProblem input)
+        public virtual LPFormulation BuildFormulation(UserProblem input)
         {
             if (input?.ObjectiveLine == null) 
                 throw new ArgumentException("Objective is required");
@@ -39,22 +39,43 @@ namespace LPR381.UI.Core
                 throw new FormatException($"Invalid objective: {objErr}");
 
             var constraints = ParseConstraints(input.Constraints ?? System.Array.Empty<string>());
-            var model = new LPFormulation(obj, constraints);
+            var baseModel = new LPFormulation(obj, constraints);
+            
+            // Apply variable sign restrictions
+            var signRestrictions = new SignRestriction[baseModel.VarNames.Length];
+            for (int i = 0; i < baseModel.VarNames.Length; i++)
+            {
+                var varName = baseModel.VarNames[i];
+                signRestrictions[i] = input.VariableSignRestrictions?.ContainsKey(varName) == true
+                    ? input.VariableSignRestrictions[varName]
+                    : SignRestriction.Positive; // Default to positive
+            }
             
             // Apply variable type restrictions
-            var intRestrictions = new IntRestriction[model.VarNames.Length];
-            var restriction = input.IntMode switch
+            var intRestrictions = new IntRestriction[baseModel.VarNames.Length];
+            for (int i = 0; i < baseModel.VarNames.Length; i++)
             {
-                "integer" => IntRestriction.Integer,
-                "binary" => IntRestriction.Binary,
-                _ => IntRestriction.Unrestricted
-            };
-            System.Array.Fill(intRestrictions, restriction);
+                var varName = baseModel.VarNames[i];
+                if (input.VariableIntRestrictions?.ContainsKey(varName) == true)
+                {
+                    intRestrictions[i] = input.VariableIntRestrictions[varName];
+                }
+                else
+                {
+                    // Fallback to global IntMode if individual restriction not specified
+                    intRestrictions[i] = input.IntMode switch
+                    {
+                        "integer" => IntRestriction.Integer,
+                        "binary" => IntRestriction.Binary,
+                        _ => IntRestriction.Unrestricted
+                    };
+                }
+            }
             
             return new LPFormulation(
-                model.ObjectiveType, model.VarNames, model.Objective,
-                model.ConstraintCoefficients, model.ConstraintSigns, model.RHS,
-                model.VarSignRestrictions, intRestrictions);
+                baseModel.ObjectiveType, baseModel.VarNames, baseModel.Objective,
+                baseModel.ConstraintCoefficients, baseModel.ConstraintSigns, baseModel.RHS,
+                signRestrictions, intRestrictions);
         }
 
         private static (ObjectiveType type, string expr) ParseObjective(string line)
@@ -110,43 +131,37 @@ namespace LPR381.UI.Core
             var m = canon.ConstraintMatrix.RowCount;
             var n = canon.ConstraintMatrix.ColumnCount;
             
-            // Pre-allocate column names array
+            // Combined matrix: objective row + constraint rows
+            var combinedMatrix = new double[m + 1, n + 1];
+            
+            // Objective row (first row)
+            for (int j = 0; j < n; j++) combinedMatrix[0, j] = canon.Objective[j];
+            combinedMatrix[0, n] = 0;
+            
+            // Constraint rows
+            for (int i = 0; i < m; i++)
+            {
+                for (int j = 0; j < n; j++)
+                    combinedMatrix[i + 1, j] = canon.ConstraintMatrix[i, j];
+                combinedMatrix[i + 1, n] = canon.RHS[i];
+            }
+            
+            // Column names
             var columnNames = new string[n + 1];
             Array.Copy(canon.VariableNames, columnNames, n);
             columnNames[n] = "RHS";
             
-            // Objective row
-            var objMatrix = new double[1, n + 1];
-            for (int j = 0; j < n; j++) objMatrix[0, j] = canon.Objective[j];
-            objMatrix[0, n] = 0;
+            // Row names: z + constraints
+            var rowNames = new string[m + 1];
+            rowNames[0] = "z";
+            for (int i = 0; i < m; i++) rowNames[i + 1] = $"c{i + 1}";
             
             _iterations.Add(new IterationTableau
             {
-                Title = "Canonical Form - Objective",
-                Columns = columnNames,
-                Rows = new[] { "z" },
-                Values = objMatrix
-            });
-            
-            // Constraint matrix
-            var constraintMatrix = new double[m, n + 1];
-            for (int i = 0; i < m; i++)
-            {
-                for (int j = 0; j < n; j++)
-                    constraintMatrix[i, j] = canon.ConstraintMatrix[i, j];
-                constraintMatrix[i, n] = canon.RHS[i];
-            }
-            
-            // Pre-allocate row names array
-            var rowNames = new string[m];
-            for (int i = 0; i < m; i++) rowNames[i] = $"c{i + 1}";
-            
-            _iterations.Add(new IterationTableau
-            {
-                Title = "Canonical Form - Constraints",
+                Title = "Canonical Form",
                 Columns = columnNames,
                 Rows = rowNames,
-                Values = constraintMatrix
+                Values = combinedMatrix
             });
         }
         
