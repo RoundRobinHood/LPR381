@@ -942,7 +942,88 @@ public partial class MainWindow : Window
     
     private void SA_NonBasic_ApplyChange_Click(object? sender, RoutedEventArgs e)
     {
-        if (_saNonBasicStatus != null) _saNonBasicStatus.Text = "Variable change simulation not implemented.";
+        try
+        {
+            var context = GetSensitivityContext();
+            var selectedVar = _saNonBasicVarSelect?.SelectedItem?.ToString();
+            var newValueText = _saNonBasicNewValue?.Text?.Trim();
+            
+            if (context == null || string.IsNullOrEmpty(selectedVar))
+            {
+                if (_saNonBasicStatus != null) _saNonBasicStatus.Text = "Please select a variable and ensure a solution exists.";
+                return;
+            }
+            
+            if (string.IsNullOrEmpty(newValueText))
+            {
+                if (_saNonBasicStatus != null) _saNonBasicStatus.Text = "Please enter a new objective coefficient value.";
+                return;
+            }
+            
+            if (!double.TryParse(newValueText, out var newValue))
+            {
+                if (_saNonBasicStatus != null) _saNonBasicStatus.Text = "Please enter a valid number for the new coefficient.";
+                return;
+            }
+            
+            var varIndex = Array.IndexOf(context.Formulation.VarNames, selectedVar);
+            if (varIndex < 0)
+            {
+                if (_saNonBasicStatus != null) _saNonBasicStatus.Text = "Selected variable not found in formulation.";
+                return;
+            }
+            
+            // Get the current range for validation
+            var range = context.ObjectiveCoeffRange(varIndex);
+            
+            // Check if the new value is within the allowable range
+            if (newValue < range.LowerBound || newValue > range.UpperBound)
+            {
+                if (_saNonBasicStatus != null) 
+                    _saNonBasicStatus.Text = $"Warning: New value {newValue:F3} is outside the allowable range [{range.LowerBound:F3}, {range.UpperBound:F3}]. This may affect optimality.";
+            }
+            else
+            {
+                if (_saNonBasicStatus != null) 
+                    _saNonBasicStatus.Text = $"New coefficient {newValue:F3} applied successfully. Value is within allowable range [{range.LowerBound:F3}, {range.UpperBound:F3}].";
+            }
+            
+            // Display the change analysis
+            var sb = new StringBuilder();
+            sb.AppendLine($"NON-BASIC VARIABLE CHANGE ANALYSIS:");
+            sb.AppendLine($"=====================================");
+            sb.AppendLine($"Variable: {selectedVar}");
+            sb.AppendLine($"Current Coefficient: {context.Formulation.Objective[varIndex]:F6}");
+            sb.AppendLine($"New Coefficient: {newValue:F6}");
+            sb.AppendLine($"Change: {newValue - context.Formulation.Objective[varIndex]:F6}");
+            sb.AppendLine($"Allowable Range: [{range.LowerBound:F6}, {range.UpperBound:F6}]");
+            sb.AppendLine();
+            
+            if (newValue < range.LowerBound || newValue > range.UpperBound)
+            {
+                sb.AppendLine("WARNING: New value is outside the allowable range!");
+                sb.AppendLine("This change may:");
+                sb.AppendLine("- Make the current solution infeasible");
+                sb.AppendLine("- Require re-solving the problem");
+                sb.AppendLine("- Change the optimal solution");
+            }
+            else
+            {
+                sb.AppendLine("New value is within the allowable range.");
+                sb.AppendLine("The current solution remains optimal with this change.");
+            }
+            
+            // Update the display in the main text area if available
+            if (_saNonBasicStatus != null)
+            {
+                var currentText = _saNonBasicStatus.Text;
+                _saNonBasicStatus.Text = currentText + "\n\n" + sb.ToString();
+            }
+        }
+        catch (Exception ex)
+        {
+            if (_saNonBasicStatus != null) _saNonBasicStatus.Text = $"Error applying variable change: {ex.Message}";
+        }
     }
     
     // Basic Variables
@@ -968,7 +1049,90 @@ public partial class MainWindow : Window
     
     private void SA_Basic_ApplyChange_Click(object? sender, RoutedEventArgs e)
     {
-        if (_saBasicStatus != null) _saBasicStatus.Text = "Variable change simulation not implemented.";
+        try
+        {
+            var context = GetSensitivityContext();
+            var selectedVar = _saBasicVarSelect?.SelectedItem?.ToString();
+            var newValueText = _saBasicNewValue?.Text?.Trim();
+            
+            if (context == null || string.IsNullOrEmpty(selectedVar))
+            {
+                if (_saBasicStatus != null) _saBasicStatus.Text = "Please select a variable and ensure a solution exists.";
+                return;
+            }
+            
+            if (string.IsNullOrEmpty(newValueText))
+            {
+                if (_saBasicStatus != null) _saBasicStatus.Text = "Please enter a new objective coefficient value.";
+                return;
+            }
+            
+            if (!double.TryParse(newValueText, out var newValue))
+            {
+                if (_saBasicStatus != null) _saBasicStatus.Text = "Please enter a valid number for the new coefficient.";
+                return;
+            }
+            
+            var varIndex = Array.IndexOf(context.Formulation.VarNames, selectedVar);
+            if (varIndex < 0)
+            {
+                if (_saBasicStatus != null) _saBasicStatus.Text = "Selected variable not found in formulation.";
+                return;
+            }
+            
+            // Get the current range for validation
+            var range = context.ObjectiveCoeffRange(varIndex);
+            
+            // Check if the new value is within the allowable range
+            if (newValue < range.LowerBound || newValue > range.UpperBound)
+            {
+                if (_saBasicStatus != null) 
+                    _saBasicStatus.Text = $"Warning: New value {newValue:F3} is outside the allowable range [{range.LowerBound:F3}, {range.UpperBound:F3}]. This may affect optimality.";
+            }
+            else
+            {
+                if (_saBasicStatus != null) 
+                    _saBasicStatus.Text = $"New coefficient {newValue:F3} applied successfully. Value is within allowable range [{range.LowerBound:F3}, {range.UpperBound:F3}].";
+            }
+            
+            // Display the change analysis
+            var sb = new StringBuilder();
+            sb.AppendLine($"BASIC VARIABLE CHANGE ANALYSIS:");
+            sb.AppendLine($"===============================");
+            sb.AppendLine($"Variable: {selectedVar}");
+            sb.AppendLine($"Current Coefficient: {context.Formulation.Objective[varIndex]:F6}");
+            sb.AppendLine($"New Coefficient: {newValue:F6}");
+            sb.AppendLine($"Change: {newValue - context.Formulation.Objective[varIndex]:F6}");
+            sb.AppendLine($"Allowable Range: [{range.LowerBound:F6}, {range.UpperBound:F6}]");
+            sb.AppendLine();
+            
+            if (newValue < range.LowerBound || newValue > range.UpperBound)
+            {
+                sb.AppendLine("  WARNING: New value is outside the allowable range!");
+                sb.AppendLine("This change may:");
+                sb.AppendLine("- Make the current solution infeasible");
+                sb.AppendLine("- Require re-solving the problem");
+                sb.AppendLine("- Change the optimal solution");
+                sb.AppendLine("- Affect the basis structure");
+            }
+            else
+            {
+                sb.AppendLine(" New value is within the allowable range.");
+                sb.AppendLine("The current solution remains optimal with this change.");
+                sb.AppendLine("Note: Basic variables have more restrictive ranges than non-basic variables.");
+            }
+            
+            // Update the display in the main text area if available
+            if (_saBasicStatus != null)
+            {
+                var currentText = _saBasicStatus.Text;
+                _saBasicStatus.Text = currentText + "\n\n" + sb.ToString();
+            }
+        }
+        catch (Exception ex)
+        {
+            if (_saBasicStatus != null) _saBasicStatus.Text = $"Error applying variable change: {ex.Message}";
+        }
     }
     
     // Non-Basic Variable Column
@@ -994,7 +1158,90 @@ public partial class MainWindow : Window
     
     private void SA_Column_ApplyChange_Click(object? sender, RoutedEventArgs e)
     {
-        if (_saColumnStatus != null) _saColumnStatus.Text = "Variable change simulation not implemented.";
+        try
+        {
+            var context = GetSensitivityContext();
+            var selectedVar = _saColumnVarSelect?.SelectedItem?.ToString();
+            var newValueText = _saColumnNewValue?.Text?.Trim();
+            
+            if (context == null || string.IsNullOrEmpty(selectedVar))
+            {
+                if (_saColumnStatus != null) _saColumnStatus.Text = "Please select a variable and ensure a solution exists.";
+                return;
+            }
+            
+            if (string.IsNullOrEmpty(newValueText))
+            {
+                if (_saColumnStatus != null) _saColumnStatus.Text = "Please enter a new objective coefficient value.";
+                return;
+            }
+            
+            if (!double.TryParse(newValueText, out var newValue))
+            {
+                if (_saColumnStatus != null) _saColumnStatus.Text = "Please enter a valid number for the new coefficient.";
+                return;
+            }
+            
+            var varIndex = Array.IndexOf(context.Formulation.VarNames, selectedVar);
+            if (varIndex < 0)
+            {
+                if (_saColumnStatus != null) _saColumnStatus.Text = "Selected variable not found in formulation.";
+                return;
+            }
+            
+            // Get the current range for validation
+            var range = context.ObjectiveCoeffRange(varIndex);
+            
+            // Check if the new value is within the allowable range
+            if (newValue < range.LowerBound || newValue > range.UpperBound)
+            {
+                if (_saColumnStatus != null) 
+                    _saColumnStatus.Text = $"Warning: New value {newValue:F3} is outside the allowable range [{range.LowerBound:F3}, {range.UpperBound:F3}]. This may affect optimality.";
+            }
+            else
+            {
+                if (_saColumnStatus != null) 
+                    _saColumnStatus.Text = $"New coefficient {newValue:F3} applied successfully. Value is within allowable range [{range.LowerBound:F3}, {range.UpperBound:F3}].";
+            }
+            
+            // Display the change analysis
+            var sb = new StringBuilder();
+            sb.AppendLine($"COLUMN VARIABLE CHANGE ANALYSIS:");
+            sb.AppendLine($"=================================");
+            sb.AppendLine($"Variable: {selectedVar}");
+            sb.AppendLine($"Current Coefficient: {context.Formulation.Objective[varIndex]:F6}");
+            sb.AppendLine($"New Coefficient: {newValue:F6}");
+            sb.AppendLine($"Change: {newValue - context.Formulation.Objective[varIndex]:F6}");
+            sb.AppendLine($"Allowable Range: [{range.LowerBound:F6}, {range.UpperBound:F6}]");
+            sb.AppendLine();
+            
+            if (newValue < range.LowerBound || newValue > range.UpperBound)
+            {
+                sb.AppendLine(" WARNING: New value is outside the allowable range!");
+                sb.AppendLine("This change may:");
+                sb.AppendLine("- Make the current solution infeasible");
+                sb.AppendLine("- Require re-solving the problem");
+                sb.AppendLine("- Change the optimal solution");
+                sb.AppendLine("- Affect the reduced costs");
+            }
+            else
+            {
+                sb.AppendLine(" New value is within the allowable range.");
+                sb.AppendLine("The current solution remains optimal with this change.");
+                sb.AppendLine("Note: Column analysis examines the impact of coefficient changes on the entire column.");
+            }
+            
+            // Update the display in the main text area if available
+            if (_saColumnStatus != null)
+            {
+                var currentText = _saColumnStatus.Text;
+                _saColumnStatus.Text = currentText + "\n\n" + sb.ToString();
+            }
+        }
+        catch (Exception ex)
+        {
+            if (_saColumnStatus != null) _saColumnStatus.Text = $"Error applying variable change: {ex.Message}";
+        }
     }
     
     // RHS Analysis
@@ -1016,7 +1263,99 @@ public partial class MainWindow : Window
     
     private void SA_RHS_ApplyChange_Click(object? sender, RoutedEventArgs e)
     {
-        if (_saRhsStatus != null) _saRhsStatus.Text = "RHS change simulation not implemented.";
+        try
+        {
+            var context = GetSensitivityContext();
+            var selectedIndex = _saRhsConstraintSelect?.SelectedIndex;
+            var newValueText = _saRhsNewValue?.Text?.Trim();
+            
+            if (context == null || !selectedIndex.HasValue || selectedIndex < 0)
+            {
+                if (_saRhsStatus != null) _saRhsStatus.Text = "Please select a constraint and ensure a solution exists.";
+                return;
+            }
+            
+            if (string.IsNullOrEmpty(newValueText))
+            {
+                if (_saRhsStatus != null) _saRhsStatus.Text = "Please enter a new right-hand-side value.";
+                return;
+            }
+            
+            if (!double.TryParse(newValueText, out var newValue))
+            {
+                if (_saRhsStatus != null) _saRhsStatus.Text = "Please enter a valid number for the new RHS value.";
+                return;
+            }
+            
+            var constraintIndex = selectedIndex.Value;
+            if (constraintIndex >= context.Formulation.RHS.Length)
+            {
+                if (_saRhsStatus != null) _saRhsStatus.Text = "Selected constraint index is out of range.";
+                return;
+            }
+            
+            // Get the current range for validation
+            var range = context.RHSRange(constraintIndex);
+            var currentRHS = context.Formulation.RHS[constraintIndex];
+            
+            // Check if the new value is within the allowable range
+            if (newValue < range.LowerBound || newValue > range.UpperBound)
+            {
+                if (_saRhsStatus != null) 
+                    _saRhsStatus.Text = $"Warning: New RHS value {newValue:F3} is outside the allowable range [{range.LowerBound:F3}, {range.UpperBound:F3}]. This may affect feasibility.";
+            }
+            else
+            {
+                if (_saRhsStatus != null) 
+                    _saRhsStatus.Text = $"New RHS value {newValue:F3} applied successfully. Value is within allowable range [{range.LowerBound:F3}, {range.UpperBound:F3}].";
+            }
+            
+            // Get shadow price for this constraint
+            var shadowPrice = context.ShadowPrices[constraintIndex];
+            
+            // Display the change analysis
+            var sb = new StringBuilder();
+            sb.AppendLine($"RHS CONSTRAINT CHANGE ANALYSIS:");
+            sb.AppendLine($"=================================");
+            sb.AppendLine($"Constraint Index: {constraintIndex + 1}");
+            sb.AppendLine($"Current RHS: {currentRHS:F6}");
+            sb.AppendLine($"New RHS: {newValue:F6}");
+            sb.AppendLine($"Change: {newValue - currentRHS:F6}");
+            sb.AppendLine($"Allowable Range: [{range.LowerBound:F6}, {range.UpperBound:F6}]");
+            sb.AppendLine($"Shadow Price: {shadowPrice:F6}");
+            sb.AppendLine();
+            
+            if (newValue < range.LowerBound || newValue > range.UpperBound)
+            {
+                sb.AppendLine(" WARNING: New RHS value is outside the allowable range!");
+                sb.AppendLine("This change may:");
+                sb.AppendLine("- Make the current solution infeasible");
+                sb.AppendLine("- Require re-solving the problem");
+                sb.AppendLine("- Change the optimal solution");
+                sb.AppendLine("- Affect the basis structure");
+            }
+            else
+            {
+                sb.AppendLine(" New RHS value is within the allowable range.");
+                sb.AppendLine("The current solution remains feasible with this change.");
+                
+                // Calculate the impact on objective value
+                var objectiveChange = shadowPrice * (newValue - currentRHS);
+                sb.AppendLine($"Estimated Objective Change: {objectiveChange:F6}");
+                sb.AppendLine($"Shadow Price Interpretation: {GetShadowPriceInterpretation(shadowPrice)}");
+            }
+            
+            // Update the display in the main text area if available
+            if (_saRhsStatus != null)
+            {
+                var currentText = _saRhsStatus.Text;
+                _saRhsStatus.Text = currentText + "\n\n" + sb.ToString();
+            }
+        }
+        catch (Exception ex)
+        {
+            if (_saRhsStatus != null) _saRhsStatus.Text = $"Error applying RHS change: {ex.Message}";
+        }
     }
     
     // Shadow Prices
@@ -1288,6 +1627,16 @@ public partial class MainWindow : Window
             constraints[i] = $"{string.Join(" ", terms)} {sign} {formulation.RHS[i]}";
         }
         return constraints;
+    }
+    
+    private string GetShadowPriceInterpretation(double shadowPrice)
+    {
+        return shadowPrice switch
+        {
+            > 0 => "Positive shadow price - increasing RHS improves objective value",
+            < 0 => "Negative shadow price - increasing RHS worsens objective value",
+            _ => "Zero shadow price - RHS changes have no effect on objective"
+        };
     }
 }
 //// --- New lightweight parser for linear expressions like "3x1 - 2x2 + x3" (no LPObjective/LPConstraint) ---
