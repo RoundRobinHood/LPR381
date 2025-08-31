@@ -46,12 +46,11 @@ public partial class MainWindow : Window
     private TextBox? _saNewActivityName;
     private TextBox? _saNewActivityObjCoeff;
     private TextBox? _saNewActivityCoeffs;
-    private TextBlock? _saNewActivityStatus;
+    private TextBox? _saAddElementsOutput;
     private TextBox? _saNewConstraintName;
     private TextBox? _saNewConstraintCoeffs;
     private TextBox? _saNewConstraintRhs;
     private ComboBox? _saNewConstraintSign;
-    private TextBlock? _saNewConstraintStatus;
     private TextBox? _saDualityDisplay;
     private TextBlock? _saDualityStatus;
     private ISolverRunner? _lastRunner;
@@ -90,12 +89,11 @@ public partial class MainWindow : Window
         _saNewActivityName = this.FindControl<TextBox>("SA_NewActivity_Name");
         _saNewActivityObjCoeff = this.FindControl<TextBox>("SA_NewActivity_ObjCoeff");
         _saNewActivityCoeffs = this.FindControl<TextBox>("SA_NewActivity_Coeffs");
-        _saNewActivityStatus = this.FindControl<TextBlock>("SA_NewActivity_Status");
+        _saAddElementsOutput = this.FindControl<TextBox>("SA_AddElements_Output");
         _saNewConstraintName = this.FindControl<TextBox>("SA_NewConstraint_Name");
         _saNewConstraintCoeffs = this.FindControl<TextBox>("SA_NewConstraint_Coeffs");
         _saNewConstraintRhs = this.FindControl<TextBox>("SA_NewConstraint_RHS");
         _saNewConstraintSign = this.FindControl<ComboBox>("SA_NewConstraint_Sign");
-        _saNewConstraintStatus = this.FindControl<TextBlock>("SA_NewConstraint_Status");
         _saDualityDisplay = this.FindControl<TextBox>("SA_Duality_Display");
         _saDualityStatus = this.FindControl<TextBlock>("SA_Duality_Status");
     }
@@ -1140,14 +1138,14 @@ public partial class MainWindow : Window
     }
     
     // Add New Activity
-    private void SA_NewActivity_Add_Click(object? sender, RoutedEventArgs e)
+    private async void SA_NewActivity_Add_Click(object? sender, RoutedEventArgs e)
     {
         try
         {
             var context = GetSensitivityContext();
             if (context == null)
             {
-                if (_saNewActivityStatus != null) _saNewActivityStatus.Text = "No solution available for adding activity.";
+                if (_saAddElementsOutput != null) _saAddElementsOutput.Text = "No solution available for adding activity.";
                 return;
             }
             
@@ -1157,13 +1155,13 @@ public partial class MainWindow : Window
             
             if (string.IsNullOrEmpty(activityName) || string.IsNullOrEmpty(objCoeffText) || string.IsNullOrEmpty(coeffsText))
             {
-                if (_saNewActivityStatus != null) _saNewActivityStatus.Text = "Please fill in all fields.";
+                if (_saAddElementsOutput != null) _saAddElementsOutput.Text = "Please fill in all fields.";
                 return;
             }
             
             if (!double.TryParse(objCoeffText, CultureInfo.InvariantCulture, out var objCoeff))
             {
-                if (_saNewActivityStatus != null) _saNewActivityStatus.Text = "Invalid objective coefficient. Use period (.) for decimals.";
+                if (_saAddElementsOutput != null) _saAddElementsOutput.Text = "Invalid objective coefficient. Use period (.) for decimals.";
                 return;
             }
             
@@ -1173,13 +1171,13 @@ public partial class MainWindow : Window
                 
             if (coeffs.Any(double.IsNaN))
             {
-                if (_saNewActivityStatus != null) _saNewActivityStatus.Text = "Invalid coefficients. Use period (.) for decimals and space-separate values.";
+                if (_saAddElementsOutput != null) _saAddElementsOutput.Text = "Invalid coefficients. Use period (.) for decimals and space-separate values.";
                 return;
             }
             
             if (coeffs.Length != context.Formulation.ConstraintSigns.Length)
             {
-                if (_saNewActivityStatus != null) _saNewActivityStatus.Text = $"Expected {context.Formulation.ConstraintSigns.Length} coefficients (one for each constraint), got {coeffs.Length}.";
+                if (_saAddElementsOutput != null) _saAddElementsOutput.Text = $"Expected {context.Formulation.ConstraintSigns.Length} coefficients (one for each constraint), got {coeffs.Length}.";
                 return;
             }
             
@@ -1195,7 +1193,22 @@ public partial class MainWindow : Window
             sb.AppendLine($"Objective coefficient: {objCoeff}");
             sb.AppendLine($"Constraint coefficients: [{string.Join(", ", coeffs)}]");
             sb.AppendLine();
-            sb.AppendLine("NEW SOLUTION:");
+            
+            // Show original solution for comparison
+            if (_lastRunner != null)
+            {
+                var originalInput = GetUserInput();
+                var originalSummary = await _lastRunner.RunAsync(originalInput);
+                sb.AppendLine("ORIGINAL SOLUTION:");
+                sb.AppendLine($"Objective Value: {originalSummary.Objective:F6}");
+                foreach (var kv in originalSummary.VariableValues)
+                {
+                    sb.AppendLine($"{kv.Key} = {kv.Value:F6}");
+                }
+                sb.AppendLine();
+            }
+            
+            sb.AppendLine("NEW SOLUTION (with added activity):");
             
             var (resultCase, resultFields) = FSharpInterop.ReadUnion(result);
             
@@ -1210,17 +1223,43 @@ public partial class MainWindow : Window
                 {
                     sb.AppendLine($"{kv.Key} = {kv.Value:F6}");
                 }
+                
+                // Add optimal tableau display
+                sb.AppendLine();
+                sb.AppendLine("OPTIMAL TABLEAU:");
+                try
+                {
+                    // Use PrimalSimplexRunner to get complete tableau
+                    var tempRunner = new PrimalSimplexRunner();
+                    var tempInput = ConvertFormulationToUserProblem(newFormulation);
+                    await tempRunner.RunAsync(tempInput);
+                    
+                    if (tempRunner.Iterations.Count > 0)
+                    {
+                        var finalIteration = tempRunner.Iterations.Last();
+                        sb.AppendLine(IterationFormat.Pretty(finalIteration));
+                    }
+                    else
+                    {
+                        sb.AppendLine("No tableau available");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    sb.AppendLine($"Could not generate tableau: {ex.Message}");
+                }
+
             }
             else
             {
                 sb.AppendLine($"Result: {resultCase}");
             }
             
-            if (_saNewActivityStatus != null) _saNewActivityStatus.Text = sb.ToString();
+            if (_saAddElementsOutput != null) _saAddElementsOutput.Text = sb.ToString();
         }
         catch (Exception ex)
         {
-            if (_saNewActivityStatus != null) _saNewActivityStatus.Text = $"Error: {ex.Message}";
+            if (_saAddElementsOutput != null) _saAddElementsOutput.Text = $"Error: {ex.Message}";
         }
     }
     
@@ -1232,7 +1271,7 @@ public partial class MainWindow : Window
             var context = GetSensitivityContext();
             if (context == null)
             {
-                if (_saNewConstraintStatus != null) _saNewConstraintStatus.Text = "No solution available for adding constraint.";
+                if (_saAddElementsOutput != null) _saAddElementsOutput.Text = "No solution available for adding constraint.";
                 return;
             }
             
@@ -1243,13 +1282,13 @@ public partial class MainWindow : Window
             
             if (string.IsNullOrEmpty(constraintName) || string.IsNullOrEmpty(coeffsText) || string.IsNullOrEmpty(rhsText) || string.IsNullOrEmpty(signText))
             {
-                if (_saNewConstraintStatus != null) _saNewConstraintStatus.Text = "Please fill in all fields.";
+                if (_saAddElementsOutput != null) _saAddElementsOutput.Text = "Please fill in all fields.";
                 return;
             }
             
             if (!double.TryParse(rhsText, CultureInfo.InvariantCulture, out var rhs))
             {
-                if (_saNewConstraintStatus != null) _saNewConstraintStatus.Text = "Invalid RHS value. Use period (.) for decimals.";
+                if (_saAddElementsOutput != null) _saAddElementsOutput.Text = "Invalid RHS value. Use period (.) for decimals.";
                 return;
             }
             
@@ -1259,13 +1298,13 @@ public partial class MainWindow : Window
                 
             if (coeffs.Any(double.IsNaN))
             {
-                if (_saNewConstraintStatus != null) _saNewConstraintStatus.Text = "Invalid coefficients. Use period (.) for decimals and space-separate values.";
+                if (_saAddElementsOutput != null) _saAddElementsOutput.Text = "Invalid coefficients. Use period (.) for decimals and space-separate values.";
                 return;
             }
             
             if (coeffs.Length != context.Formulation.VarNames.Length)
             {
-                if (_saNewConstraintStatus != null) _saNewConstraintStatus.Text = $"Expected {context.Formulation.VarNames.Length} coefficients (one for each variable: {string.Join(", ", context.Formulation.VarNames)}), got {coeffs.Length}.\nExample: For constraint 'x2 <= 5', enter coefficients '0 1 0' (0 for x1, 1 for x2, 0 for x3).";
+                if (_saAddElementsOutput != null) _saAddElementsOutput.Text = $"Expected {context.Formulation.VarNames.Length} coefficients (one for each variable: {string.Join(", ", context.Formulation.VarNames)}), got {coeffs.Length}.\nExample: For constraint 'x2 <= 5', enter coefficients '0 1 0' (0 for x1, 1 for x2, 0 for x3).";
                 return;
             }
             
@@ -1378,20 +1417,43 @@ public partial class MainWindow : Window
                 {
                     sb.AppendLine($"Slack: {rhs - constraintValue:F6}");
                 }
-                else if (!isBinding && signText == ">=")
+                
+                // Add optimal tableau display
+                sb.AppendLine();
+                sb.AppendLine("OPTIMAL TABLEAU:");
+                try
                 {
+                    // Use PrimalSimplexRunner to get complete tableau
+                    var tempRunner = new PrimalSimplexRunner();
+                    var tempInput = ConvertFormulationToUserProblem(newFormulation);
+                    await tempRunner.RunAsync(tempInput);
+                    
+                    if (tempRunner.Iterations.Count > 0)
+                    {
+                        var finalIteration = tempRunner.Iterations.Last();
+                        sb.AppendLine(IterationFormat.Pretty(finalIteration));
+                    }
+                    else
+                    {
+                        sb.AppendLine("No tableau available");
+                    }
                 }
+                catch (Exception ex)
+                {
+                    sb.AppendLine($"Could not generate tableau: {ex.Message}");
+                }
+
             }
             else
             {
                 sb.AppendLine($"Result: {resultMessage}");
             }
             
-            if (_saNewConstraintStatus != null) _saNewConstraintStatus.Text = sb.ToString();
+            if (_saAddElementsOutput != null) _saAddElementsOutput.Text = sb.ToString();
         }
         catch (Exception ex)
         {
-            if (_saNewConstraintStatus != null) _saNewConstraintStatus.Text = $"Error: {ex.Message}";
+            if (_saAddElementsOutput != null) _saAddElementsOutput.Text = $"Error: {ex.Message}";
         }
     }
     
