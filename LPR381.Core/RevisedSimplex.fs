@@ -101,32 +101,32 @@ type RevisedSimplexNode=
       let reduced_costs = c_B * constraintMat - this.canon.Objective
       let columnNames = Array.append this.canon.VariableNames [| "RHS" |]
       let rowNames = Array.init this.canon.ConstraintMatrix.RowCount (fun i -> sprintf "c%d" i)
-
-      let values = Matrix<double>.Build.Dense(this.canon.ConstraintMatrix.RowCount + 1, this.canon.ConstraintMatrix.ColumnCount + 1)
+      let values = Matrix<double>.Build.Dense(this.canon.ConstraintMatrix.RowCount + 1, this.canon.ConstraintMatrix.ColumnCount + 1)  
 
       let objective = values.Row 0
+      
       objective.SetSubVector(0, reduced_costs.Count, reduced_costs)
       objective.[reduced_costs.Count] <- objective_value
       values.SetRow(0, objective)
 
-      let _rhs = values.Column (values.ColumnCount - 1)
+      let _rhs = values.Column rhs.Count
       _rhs.SetSubVector(1, rhs.Count, rhs)
-      values.SetColumn(values.ColumnCount - 1, _rhs)
+      values.SetColumn(rhs.Count, _rhs)
 
       values.SetSubMatrix(1, 0, constraintMat)
 
-      let tableauState = 
+      let state = 
         match this.state with
         | Pivot (r, c, _) -> TableauState.Pivot (r+1, c)
-        | ResultState s -> TableauState.ResultState s
+        | ResultState x -> TableauState.ResultState x
 
       {
         Tableau = {
-          columnNames = columnNames
-          rowNames = rowNames
+          columnNames = Array.append this.canon.VariableNames [| "RHS" |]
+          rowNames = Array.init rhs.Count (sprintf "c%d")
           values = values
         }
-        State = tableauState
+        State = state
       }
 
   interface ISimplexResultProvider with
@@ -364,8 +364,54 @@ type RevisedDualSimplex(item: RevisedSimplexNode, formulation: LPFormulation)=
     let basis = [| canon.Objective.Count - canon.RHS.Count .. canon.Objective.Count - 1 |]
     RevisedDualSimplex(node(basis, canon, Matrix<double>.Build.DenseIdentity basis.Length, formulation), formulation)
 
-  new(formulation: LPFormulation, canon: LPCanonical, basis: int[], bInverse: Matrix<double>)=
-    RevisedDualSimplex(node (basis, canon, bInverse, formulation), formulation)
+  internal new(formulation: LPFormulation, canon: LPCanonical, basis: int array, bInverse: Matrix<double>)=
+    RevisedDualSimplex(node(basis, canon, bInverse, formulation), formulation)
+
+  new(formulation: LPFormulation, basis: int array)=
+    let canon = formulation.ToLPCanonical()
+    if basis.Length <> canon.RHS.Count then invalidArg "basis" "Basis is the wrong size"
+    let b = basis |> Array.map canon.ConstraintMatrix.Column |> Matrix<double>.Build.DenseOfColumnVectors
+    let bInverse = b.Inverse()
+
+    RevisedDualSimplex(node(basis, canon, bInverse, formulation), formulation)
+
+  new(context: RelaxedSimplexSensitivityContext)=
+    if context = null then invalidArg "context" "Context is null"
+
+    RevisedDualSimplex(context.Formulation, context.Basis)
+
+  member _.WithFormulationRHSUpdate (row: int) (newValue: double) =
+    let new_formulation = formulation.WithRHSUpdate row newValue
+
+    RevisedDualSimplex(new_formulation, item.basis)
+
+  member _.WithFormulationObjectiveUpdate (column: int) (newValue: double) =
+    let new_formulation = formulation.WithObjectiveUpdate column newValue
+
+    RevisedDualSimplex(new_formulation, item.basis)
+
+  member _.WithFormulationConstraintCoeffUpdate (row: int) (column: int) (newValue: double) =
+    let new_formulation = formulation.WithConstraintCoeffUpdate row column newValue
+
+    RevisedDualSimplex(new_formulation, item.basis)
+
+  member _.WithActivity(variableName: string) (objectiveCoeff: double) (coeffColumn: double array) (signRestriction: SignRestriction) =
+    let new_formulation = formulation.WithActivity variableName objectiveCoeff coeffColumn signRestriction
+
+    RevisedDualSimplex(new_formulation, item.basis)
+
+  member _.WithConstraint(constr: LPConstraint) =
+    let new_formulation = formulation.WithConstraint constr
+    
+    let basis =
+      match constr.ConstraintSign with
+      | ConstraintSign.LessOrEqual | ConstraintSign.GreaterOrEqual ->
+        Array.append item.basis [| item.canon.Objective.Count |]
+      | ConstraintSign.Equal ->
+        Array.append item.basis [| item.canon.Objective.Count ; item.canon.Objective.Count + 1 |]
+      | _ -> failwith "Invalid constraint sign"
+
+    RevisedDualSimplex(new_formulation, basis)
 
   interface ITree<RevisedSimplexNode> with
     member _.Item = item

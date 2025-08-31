@@ -142,8 +142,11 @@ type LPConstraint(
       error <- sprintf "Invalid constraint sign: '%s'" s
       false
 
+  new(variableNames: string array, values: double array, constraintSign: ConstraintSign, rhs: double)=
+    LPConstraint(Array.zip values variableNames, constraintSign, rhs)
+
   new(variableNames: string array, values: Vector<double>, constraintSign: ConstraintSign, rhs: double)=
-    LPConstraint(Array.zip (values.ToArray()) variableNames, constraintSign, rhs)
+    LPConstraint(variableNames, values.ToArray(), constraintSign, rhs)
 
 type KnapsackCanonical(
   variableNames: string array,
@@ -223,6 +226,7 @@ type LPFormulation(
   varSignRestrictions: SignRestriction[],
   varIntRestrictions: IntRestriction[]
 ) =
+
   do
     if objective.Length <> varNames.Length then invalidArg "varNames" "VarNames dimensions mismatch with objective length"
     if objective.Length <> constraintCoefficients.GetLength 1 then invalidArg "constraintCoefficients" "Constraint coefficients dimensions mismatch with objective length"
@@ -232,6 +236,19 @@ type LPFormulation(
     if rhs.Length <> constraintCoefficients.GetLength 0 then invalidArg "constraintCoefficients" "Constraint coefficients must have the same row count as rhs"
     if rhs.Length <> constraintSigns.Length then invalidArg "constraintSigns" "Constraint signs must be the same length as rhs"
 
+  let objectiveObject = lazy (
+      LPObjective(objectiveType, Array.zip objective varNames)
+    )
+
+  let constraintObjects = lazy (
+      let grabRow (row: int) =
+        [| 0 .. varNames.Length - 1 |]
+        |> Array.map (Array2D.get constraintCoefficients row)
+
+      constraintSigns
+      |> Array.mapi (fun i s -> LPConstraint(varNames, grabRow i, s, rhs.[i]))
+    )
+
   member val ObjectiveType = objectiveType
   member val VarNames = varNames
   member val Objective = objective
@@ -240,6 +257,66 @@ type LPFormulation(
   member val RHS = rhs
   member val VarSignRestrictions = varSignRestrictions
   member val VarIntRestrictions = varIntRestrictions
+
+  member _.WithConstraint(constr: LPConstraint)=
+    let rec sort (names: string list) (values: (double * string) array) (ret: (double * string) array) =
+      match names with
+      | name :: rest ->
+        sort rest (values |> Array.filter (snd >> (<>) name)) (Array.append ret (values |> Array.filter (snd >> (=) name)))
+      | [] ->
+        Array.append ret values
+
+    let sorted = LPConstraint(sort (Array.toList varNames) constr.LeftSide [||], constr.ConstraintSign, constr.RightSide)
+    let signRestrictions = Array.append varSignRestrictions (Array.create (max(sorted.LeftSide.Length - varSignRestrictions.Length) 0) SignRestriction.Positive)
+    let intRestrictions = Array.append varIntRestrictions (Array.create (max(sorted.LeftSide.Length - varIntRestrictions.Length) 0) IntRestriction.Unrestricted)
+
+    LPFormulation(objectiveObject.Value, Array.append constraintObjects.Value [| sorted |], signRestrictions, intRestrictions)
+
+  member _.WithActivity(variableName: string) (objectiveCoeff: double) (coeffColumn: double array) (signRestriction: SignRestriction)  =
+    if varNames |> Array.exists ((=) variableName) then invalidArg "name" "Variable name already taken"
+    if coeffColumn.Length <> rhs.Length then invalidArg "coeffColumn" "Coefficient column not the same length as the other columns"
+
+    let newCoeffMatrix = Array2D.zeroCreate rhs.Length (varNames.Length+1)
+    for i in [ 0 .. rhs.Length - 1 ] do
+      for j in [ 0 .. varNames.Length ] do
+        if j = varNames.Length then
+          newCoeffMatrix.[i,j] <- coeffColumn.[j]
+        else
+          newCoeffMatrix.[i,j] <- constraintCoefficients.[i,j]
+
+    LPFormulation(
+      objectiveType, 
+      Array.append varNames [| variableName |],
+      Array.append objective [| objectiveCoeff |],
+      newCoeffMatrix,
+      constraintSigns,
+      rhs,
+      Array.append varSignRestrictions [| signRestriction |],
+      Array.append varIntRestrictions [| IntRestriction.Unrestricted |]
+    )
+
+  member _.WithRHSUpdate(row: int) (newValue: double)=
+    if row < 0 || row >= rhs.Length then invalidArg "row" "row out of bounds"
+    let newRHS = rhs |> Array.copy
+    newRHS.[row] <- newValue
+
+    LPFormulation(objectiveType, varNames, objective, constraintCoefficients, constraintSigns, newRHS, varSignRestrictions, varIntRestrictions)
+
+  member _.WithObjectiveUpdate(column: int) (newValue: double)=
+    if column < 0 || column >= varNames.Length then invalidArg "column" "column out of bounds"
+    let newObjective = objective |> Array.copy
+    newObjective.[column] <- newValue
+
+    LPFormulation(objectiveType, varNames, newObjective, constraintCoefficients, constraintSigns, rhs, varSignRestrictions, varIntRestrictions)
+
+  member _.WithConstraintCoeffUpdate (row: int) (column: int) (newValue: double) =
+    if row < 0 || row >= rhs.Length then invalidArg "row" "row out of bounds"
+    if column < 0 || column >= varNames.Length then invalidArg "column" "column out of bounds"
+
+    let newCoeffMatrix = constraintCoefficients |> Array2D.copy
+    newCoeffMatrix.[row, column] <- newValue
+
+    LPFormulation(objectiveType, varNames, objective, newCoeffMatrix, constraintSigns, rhs, varSignRestrictions, varIntRestrictions)
 
   member _.ToKnapsackCanonical() =
     if varIntRestrictions |> Array.exists ((<>) IntRestriction.Binary) then failwith "Invalid knapsack: all variables should be binary"
