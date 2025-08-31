@@ -93,6 +93,42 @@ type RevisedSimplexNode=
       let c_B = this.basis |> Array.map (fun x -> this.Canon.Objective.[x]) |> Vector.Build.Dense
       c_B.DotProduct(this.bInverse * this.canon.RHS)
 
+    member this.SimplexNode =
+      let c_B = this.basis |> Array.map (fun x -> this.Canon.Objective.[x]) |> Vector<double>.Build.Dense
+      let constraintMat = this.bInverse * this.canon.ConstraintMatrix
+      let rhs = this.bInverse * this.canon.RHS
+      let objective_value = this.ObjectiveValue
+      let reduced_costs = c_B * constraintMat - this.canon.Objective
+      let columnNames = Array.append this.canon.VariableNames [| "RHS" |]
+      let rowNames = Array.init this.canon.ConstraintMatrix.RowCount (fun i -> sprintf "c%d" i)
+
+      let values = Matrix<double>.Build.Dense(this.canon.ConstraintMatrix.RowCount + 1, this.canon.ConstraintMatrix.ColumnCount + 1)
+
+      let objective = values.Row 0
+      objective.SetSubVector(0, reduced_costs.Count, reduced_costs)
+      objective.[reduced_costs.Count] <- objective_value
+      values.SetRow(0, objective)
+
+      let _rhs = values.Column (values.ColumnCount - 1)
+      _rhs.SetSubVector(1, rhs.Count, rhs)
+      values.SetColumn(values.ColumnCount - 1, _rhs)
+
+      values.SetSubMatrix(1, 0, constraintMat)
+
+      let tableauState = 
+        match this.state with
+        | Pivot (r, c, _) -> TableauState.Pivot (r+1, c)
+        | ResultState s -> TableauState.ResultState s
+
+      {
+        Tableau = {
+          columnNames = columnNames
+          rowNames = rowNames
+          values = values
+        }
+        State = tableauState
+      }
+
   interface ISimplexResultProvider with
     member this.SimplexResult = 
       match this.state with

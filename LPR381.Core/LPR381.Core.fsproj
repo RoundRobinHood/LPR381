@@ -8,8 +8,8 @@
   <ItemGroup>
     <Compile Include="Library.fs" />
     <Compile Include="Formulation.fs" />
-    <Compile Include="RevisedSimplex.fs" />
     <Compile Include="PrimalSimplex.fs" />
+    <Compile Include="RevisedSimplex.fs" />
     <Compile Include="BranchAndBound.fs" />
     <Compile Include="CuttingPlanes.fs" />
     <Compile Include="Knapsack.fs" />

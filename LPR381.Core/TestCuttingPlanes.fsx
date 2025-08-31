@@ -4,6 +4,7 @@
 
 // adjust paths if your files live in a different folder
 #load "Formulation.fs"
+#load "PrimalSimplex.fs"
 #load "RevisedSimplex.fs"
 #load "BranchAndBound.fs"
 #load "CuttingPlanes.fs"
