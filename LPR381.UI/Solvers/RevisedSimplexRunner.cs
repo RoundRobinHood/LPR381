@@ -3,6 +3,7 @@ using LPR381.UI.Core;
 using LPR381.UI.Models;
 using System.Collections.Generic;
 using System.Linq;
+using System;
 
 namespace LPR381.UI.Solvers
 {
@@ -16,6 +17,7 @@ namespace LPR381.UI.Solvers
             _iterations.Clear();
             AddCanonicalForm(model);
             
+            var canon = model.ToLPCanonical();
             var root = new RevisedPrimalSimplex(model);
             var summary = new SolveSummary();
             var stack = new Stack<(ITree<RevisedSimplexNode> node, int idx)>();
@@ -31,43 +33,95 @@ namespace LPR381.UI.Solvers
                 if (stateCase == "Pivot") title += " (Pivot)";
                 else if (stateCase == "ResultState") title += " (Final)";
 
-                // B⁻¹ (Product Form)
-                var binv = node.BInverse;
-                int m = binv.GetLength(0);
-                var rc = Enumerable.Range(1, m).Select(i => $"r{i}").ToArray();
-                var cc = Enumerable.Range(1, m).Select(i => $"c{i}").ToArray();
-                _iterations.Add(new IterationTableau 
-                { 
-                    Title = $"{title} – B⁻¹ (Product Form)", 
-                    Columns = cc, 
-                    Rows = rc, 
-                    Values = binv 
-                });
 
                 // Price Out Information
                 if (stateCase == "Pivot")
                 {
+                    var leavingBasis = (int)stateFields[0];
+                    var enteringVariable = (int)stateFields[1];
+                    var enteringVariableName = canon.VariableNames[enteringVariable];
+                    var leavingVariableName = canon.VariableNames[node.Basis[leavingBasis]];
+                    var eta = (EtaMatrix)stateFields[2];
+
+                    // eta * B⁻¹ (Product Form)
+                    var binv = node.BInverse;
+                    int m = binv.GetLength(0);
+                    var rc = Enumerable.Range(1, m).Select(i => $"r{i}").ToArray();
+                    var cc = Enumerable.Range(1, m).Select(i => $"c{i}").ToArray();
+                    _iterations.Add(new IterationTableau
+                    {
+                        Title = $"{title} - E (Product Form)",
+                        Columns = cc,
+                        Rows = rc,
+                        Values = eta.matrix.ToArray()
+                    });
+                    _iterations.Add(new IterationTableau 
+                    { 
+                        Title = $"{title} – B⁻¹ (Product Form)", 
+                        Columns = cc, 
+                        Rows = rc, 
+                        Values = binv 
+                    });
+
                     try
                     {
                         var priceOut = node.PriceOutInfo;
-                        var (priceCase, _) = FSharpInterop.ReadUnion(priceOut);
+                        var (priceCase, priceFields) = FSharpInterop.ReadUnion(priceOut);
                         
                         if (priceCase == "Primal")
                         {
-                            // Simplified price out display
-                            var rcMatrix = new double[1, 1];
-                            rcMatrix[0, 0] = 1.0; // Placeholder
+                            var nbvCosts = (Tuple<double, string>[])priceFields[0];
+                            var rhs = (double[])priceFields[1];
+                            var ratios = (double[])priceFields[2];
+                            var enteringColumn = (double[])priceFields[3];
+
+                            var columns = new List<string>();
+                            for(int i = 0;i < nbvCosts.Length; i++) {
+                                columns.Add(nbvCosts[i].Item2);
+                            }
+                            columns.Add("rhs");
+                            columns.Add("ratios");
+
+                            var rows = new List<string>();
+                            rows.Add("z");
+                            for(int i = 0;i < rhs.Length; i++) {
+                                rows.Add($"c{i+1}");
+                            }
+
+                            var values = new double[rows.Count, columns.Count];
+
+                            for(int i = 0; i < nbvCosts.Length; i++) {
+                                values[0, i] = -nbvCosts[i].Item1;
+                            }
+                            values[0, nbvCosts.Length] = node.ObjectiveValue;
+
+                            for(int i = 1; i < rows.Count; i++) {
+                                for(int j = 0; j < nbvCosts.Length; j++) {
+                                    if(columns[j] == enteringVariableName) {
+                                        values[i, j] = enteringColumn[i-1];
+                                    } else {
+                                        values[i, j] = double.NaN;
+                                    }
+                                }
+                            }
+
+                            for(int i = 1; i < rows.Count; i++) {
+                                values[i, columns.Count - 2] = rhs[i-1];
+                                values[i, columns.Count - 1] = ratios[i-1];
+                            }
                             
                             _iterations.Add(new IterationTableau
                             {
-                                Title = $"{title} – Price Out Info",
-                                Columns = new[] { "Available" },
-                                Rows = new[] { "Status" },
-                                Values = rcMatrix
+                                Title = $"{title} – Price Out Info (decision: pivot from {leavingVariableName} to {enteringVariableName})",
+                                Columns = columns.ToArray(),
+                                Rows = rows.ToArray(),
+                                Values = values
                             });
                         }
                     }
-                    catch { /* Price out info not available */ }
+                    catch (Exception ex) {
+                        Console.WriteLine("Error occurred while adding price out iterations: {0}", ex);
+                    }
                 }
 
                 var provider = (ISimplexResultProvider)node;
