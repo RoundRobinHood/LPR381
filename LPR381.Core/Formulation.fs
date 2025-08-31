@@ -309,6 +309,15 @@ type LPFormulation(
 
     LPFormulation(objectiveType, varNames, newObjective, constraintCoefficients, constraintSigns, rhs, varSignRestrictions, varIntRestrictions)
 
+  member _.WithConstraintCoeffUpdate (row: int) (column: int) (newValue: double) =
+    if row < 0 || row >= rhs.Length then invalidArg "row" "row out of bounds"
+    if column < 0 || column >= varNames.Length then invalidArg "column" "column out of bounds"
+
+    let newCoeffMatrix = constraintCoefficients |> Array2D.copy
+    newCoeffMatrix.[row, column] <- newValue
+
+    LPFormulation(objectiveType, varNames, objective, newCoeffMatrix, constraintSigns, rhs, varSignRestrictions, varIntRestrictions)
+
   member _.ToKnapsackCanonical() =
     if varIntRestrictions |> Array.exists ((<>) IntRestriction.Binary) then failwith "Invalid knapsack: all variables should be binary"
     if constraintCoefficients.GetLength 0 <> 1 then failwith "Invalid knapsack: multiple constraints"

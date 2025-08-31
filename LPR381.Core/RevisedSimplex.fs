@@ -388,6 +388,11 @@ type RevisedDualSimplex(item: RevisedSimplexNode, formulation: LPFormulation)=
 
     RevisedDualSimplex(new_formulation, item.basis)
 
+  member _.WithFormulationConstraintCoeffUpdate (row: int) (column: int) (newValue: double) =
+    let new_formulation = formulation.WithConstraintCoeffUpdate row column newValue
+
+    RevisedDualSimplex(new_formulation, item.basis)
+
   member _.WithActivity(variableName: string) (objectiveCoeff: double) (coeffColumn: double array) (signRestriction: SignRestriction) =
     let new_formulation = formulation.WithActivity variableName objectiveCoeff coeffColumn signRestriction
 
