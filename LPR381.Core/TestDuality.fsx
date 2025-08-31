@@ -1,12 +1,10 @@
 #r "nuget: MathNet.Numerics"
 #load "Formulation.fs"
 #load "RevisedSimplex.fs"
-#load "ResultAnalysis.fs"
+#load "BranchAndBound.fs"
 #load "Explorer.fs"
+#load "ResultAnalysis.fs"
 
-open System
-open System.Collections.Generic
-open MathNet.Numerics.LinearAlgebra
 open LPR381.Core
 
 let printDualityResult (result: DualityResult) =
@@ -27,13 +25,6 @@ let testDuality (name: string) (lp: LPFormulation) =
         let primalResult = Explorer.SolveSimplex primalTree
         printfn "Primal result: %A" primalResult
         
-        // Get optimal basis for sensitivity analysis
-        let rec getOptimalNode (tree: ITree<RevisedSimplexNode>) =
-            match tree.Item.SimplexResult with
-            | Some _ -> tree.Item
-            | None -> getOptimalNode tree.Children.[0]
-        
-        let optimalNode = getOptimalNode primalTree
         // Get dual formulation and solve
         let dualFormulation = DualFormulation(lp).ToLPFormulation()
         let dualTree = RevisedDualSimplex dualFormulation

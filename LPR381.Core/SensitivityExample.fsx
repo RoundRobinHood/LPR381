@@ -1,8 +1,9 @@
 #r "nuget: MathNet.Numerics"
 #load "Formulation.fs"
 #load "RevisedSimplex.fs"
-#load "ResultAnalysis.fs"
+#load "BranchAndBound.fs"
 #load "Explorer.fs"
+#load "ResultAnalysis.fs"
 
 open LPR381.Core
 

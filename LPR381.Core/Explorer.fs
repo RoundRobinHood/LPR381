@@ -107,13 +107,7 @@ module Explorer =
     
     match result with
     | Optimal _ ->
-      let rec getOptimalNode (tree: ITree<RevisedSimplexNode>) =
-        match (tree.Item :> ISimplexResultProvider).SimplexResult with
-        | Some _ -> tree.Item
-        | None -> getOptimalNode tree.Children.[0]
-      
-      let optimalNode = getOptimalNode tree
-      let dualFormulation = DualFormulation(formulation)
+      let dualFormulation = DualFormulation formulation
       let dualResult = SolveSimplex (RevisedDualSimplex (dualFormulation.ToLPFormulation()))
       
       let dualityResult = 
@@ -130,5 +124,5 @@ module Explorer =
         | Unbounded _, Infeasible _ -> NoDuality "Primal unbounded, dual infeasible"
         | _ -> NoDuality "Both problems infeasible or other error"
       
-      (result, dualResult, dualityResult)
+      result, dualResult, dualityResult
     | _ -> failwithf "Cannot perform sensitivity analysis on non-optimal result: %A" result
