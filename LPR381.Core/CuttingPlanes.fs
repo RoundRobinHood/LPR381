@@ -31,7 +31,7 @@ type RevisedCuttingPlanesNode(revisedTree: RevisedDualSimplex)=
                 with
           | Some x ->
             Cut x
-          | None -> Optimal (canonicalVars, formulationVars, objectiveValue) |> ResultState
+          | Option.None -> Optimal (canonicalVars, formulationVars, objectiveValue) |> ResultState
         | x -> ResultState x
 
       | _ -> failwith "Invalid solution state"
@@ -45,7 +45,7 @@ type RevisedCuttingPlanesNode(revisedTree: RevisedDualSimplex)=
     member _.SimplexResult =
       match state.Value with
       | ResultState x -> Some x
-      | Cut _ -> None
+      | Cut _ -> Option.None
 
 type RevisedCuttingPlanes(item: RevisedCuttingPlanesNode, formulation: LPFormulation)=
   let children = lazy (
@@ -79,3 +79,8 @@ type RevisedCuttingPlanes(item: RevisedCuttingPlanesNode, formulation: LPFormula
     member _.Item = item
     member _.Children = children.Value
     member _.Formulation = formulation
+    member _.SensitivityContext =
+      let canon = item.SubSolution.canon
+      if canon.VarIntRestrictions |> Array.exists ((<>) IntRestriction.Unrestricted) then null else
+      RelaxedSimplexSensitivityContext(formulation, canon, item.SubSolution.basis, item.SubSolution.bInverse)
+      

@@ -371,6 +371,7 @@ type LPFormulation(
         constraintMat.[writeRow, writeColumn] <- 1
         rhs.[writeRow] <- 1
         writeRow <- writeRow + 1
+        writeColumn <- writeColumn + 1
         varIntRestrictions.[i] <- IntRestriction.Integer
       | _ -> ()
 
@@ -436,11 +437,6 @@ type LPFormulation(
       intRestrictions
     )
 
-type ITree<'T> =
-  abstract member Item: 'T
-  abstract member Children: ITree<'T>[]
-  abstract member Formulation: LPFormulation
-
 type SimplexResult =
   | Optimal of canonicalVars:Dictionary<string, double> * formulationVars:Dictionary<string, double> * objectiveValue:double
   | Unbounded of variableName:string
@@ -448,3 +444,53 @@ type SimplexResult =
 
 type ISimplexResultProvider =
   abstract member SimplexResult: Option<SimplexResult>
+  
+type DualityResult =
+  | StrongDuality of primalObjective:double * dualObjective:double
+  | WeakDuality of primalObjective:double * dualObjective:double
+  | NoDuality of reason:string
+
+type DualFormulation(primal: LPFormulation) =
+  let dualObjectiveType = if primal.ObjectiveType = ObjectiveType.Max then ObjectiveType.Min else ObjectiveType.Max
+  let dualVarNames = Array.init primal.RHS.Length (fun i -> sprintf "y%d" (i+1))
+  let dualObjective = primal.RHS
+  let dualConstraintMatrix = Array2D.init primal.VarNames.Length primal.RHS.Length (fun i j -> primal.ConstraintCoefficients.[j,i])
+  let dualRHS = primal.Objective
+  
+  // Dual constraint signs based on primal variable sign restrictions
+  let dualConstraintSigns = 
+    primal.VarSignRestrictions |> Array.map (fun signRestr ->
+      match primal.ObjectiveType, signRestr with
+      | ObjectiveType.Max, SignRestriction.Positive -> ConstraintSign.GreaterOrEqual
+      | ObjectiveType.Max, SignRestriction.Negative -> ConstraintSign.LessOrEqual
+      | ObjectiveType.Max, SignRestriction.Unrestricted -> ConstraintSign.Equal
+      | ObjectiveType.Min, SignRestriction.Positive -> ConstraintSign.LessOrEqual
+      | ObjectiveType.Min, SignRestriction.Negative -> ConstraintSign.GreaterOrEqual
+      | ObjectiveType.Min, SignRestriction.Unrestricted -> ConstraintSign.Equal
+      | _ -> ConstraintSign.Equal)
+  
+  // Dual variable sign restrictions based on primal constraint signs
+  let dualSignRestrictions = 
+    primal.ConstraintSigns |> Array.map (fun constrSign ->
+      match primal.ObjectiveType, constrSign with
+      | ObjectiveType.Max, ConstraintSign.LessOrEqual -> SignRestriction.Positive
+      | ObjectiveType.Max, ConstraintSign.GreaterOrEqual -> SignRestriction.Negative
+      | ObjectiveType.Max, ConstraintSign.Equal -> SignRestriction.Unrestricted
+      | ObjectiveType.Min, ConstraintSign.LessOrEqual -> SignRestriction.Negative
+      | ObjectiveType.Min, ConstraintSign.GreaterOrEqual -> SignRestriction.Positive
+      | ObjectiveType.Min, ConstraintSign.Equal -> SignRestriction.Unrestricted
+      | _ -> SignRestriction.Unrestricted)
+  
+  let dualIntRestrictions = Array.create dualVarNames.Length IntRestriction.Unrestricted
+
+  member _.ToLPFormulation() =
+    LPFormulation(
+      dualObjectiveType,
+      dualVarNames,
+      dualObjective,
+      dualConstraintMatrix,
+      dualConstraintSigns,
+      dualRHS,
+      dualSignRestrictions,
+      dualIntRestrictions
+    )

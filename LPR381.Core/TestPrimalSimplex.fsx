@@ -3,6 +3,8 @@
 #r "nuget: MathNet.Numerics.FSharp"
 
 #load "Formulation.fs"
+#load "ResultAnalysis.fs"
+#load "ResultInterfaces.fs"
 #load "PrimalSimplex.fs"
 #load "RevisedSimplex.fs"
 #load "BranchAndBound.fs"

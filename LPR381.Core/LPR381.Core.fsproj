@@ -8,6 +8,9 @@
   <ItemGroup>
     <Compile Include="Library.fs" />
     <Compile Include="Formulation.fs" />
+    <Compile Include="ResultAnalysis.fs" />
+    <Compile Include="ResultInterfaces.fs" />
+    <Compile Include="RevisedSimplex.fs" />
     <Compile Include="PrimalSimplex.fs" />
     <Compile Include="RevisedSimplex.fs" />
     <Compile Include="BranchAndBound.fs" />

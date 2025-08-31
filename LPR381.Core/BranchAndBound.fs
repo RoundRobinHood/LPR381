@@ -31,7 +31,7 @@ type RevisedBNBNode(revisedTree: RevisedDualSimplex)=
                 with
           | Some x -> 
             Branch x
-          | None -> Optimal (canonicalVars, formulationVars, objectiveValue) |> ResultState
+          | Option.None -> Optimal (canonicalVars, formulationVars, objectiveValue) |> ResultState
         | x -> ResultState x
 
       | _ -> failwith "Invalid solution state"
@@ -45,7 +45,7 @@ type RevisedBNBNode(revisedTree: RevisedDualSimplex)=
     member _.SimplexResult = 
       match state.Value with
       | ResultState x -> Some x
-      | Branch _ -> None
+      | Branch _ -> Option.None
 
 type RevisedBranchAndBound(item: RevisedBNBNode, formulation: LPFormulation)=
   let children = lazy (
@@ -81,3 +81,8 @@ type RevisedBranchAndBound(item: RevisedBNBNode, formulation: LPFormulation)=
     member _.Item = item
     member _.Children = children.Value
     member _.Formulation = formulation
+    member _.SensitivityContext =
+      let canon = item.SubSolution.canon
+      if canon.VarIntRestrictions |> Array.exists ((<>) IntRestriction.Unrestricted) then null else
+      RelaxedSimplexSensitivityContext(formulation, canon, item.SubSolution.basis, item.SubSolution.bInverse)
+
