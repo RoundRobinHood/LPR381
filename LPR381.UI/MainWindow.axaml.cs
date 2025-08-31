@@ -41,6 +41,8 @@ public partial class MainWindow : Window
     private TextBox? _saRhsNewValue;
     private TextBlock? _saRhsStatus;
     private DataGrid? _saShadowPricesGrid;
+    private TextBlock? _saShadowPricesStatus;
+    private TextBox? _saShadowPricesOutput;
     private TextBox? _saNewActivityName;
     private TextBox? _saNewActivityObjCoeff;
     private TextBox? _saNewActivityCoeffs;
@@ -82,6 +84,8 @@ public partial class MainWindow : Window
         _saRhsNewValue = this.FindControl<TextBox>("SA_RHS_NewValue");
         _saRhsStatus = this.FindControl<TextBlock>("SA_RHS_Status");
         _saShadowPricesGrid = this.FindControl<DataGrid>("SA_ShadowPrices_Grid");
+        _saShadowPricesStatus = this.FindControl<TextBlock>("SA_ShadowPrices_Status");
+        _saShadowPricesOutput = this.FindControl<TextBox>("SA_ShadowPrices_Output");
         _saNewActivityName = this.FindControl<TextBox>("SA_NewActivity_Name");
         _saNewActivityObjCoeff = this.FindControl<TextBox>("SA_NewActivity_ObjCoeff");
         _saNewActivityCoeffs = this.FindControl<TextBox>("SA_NewActivity_Coeffs");
@@ -155,6 +159,15 @@ public partial class MainWindow : Window
                     string.Join("\n", summary.VariableValues.Select(kv => $"{kv.Key} = {kv.Value}"));
             }
             
+            // Populate sensitivity analysis dropdowns after successful solve
+            PopulateSensitivityAnalysis();
+            
+            // Clear any previous sensitivity analysis status messages
+            if (_saNonBasicStatus != null) _saNonBasicStatus.Text = "Ready for analysis";
+            if (_saBasicStatus != null) _saBasicStatus.Text = "Ready for analysis";
+            if (_saColumnStatus != null) _saColumnStatus.Text = "Ready for analysis";
+            if (_saRhsStatus != null) _saRhsStatus.Text = "Ready for analysis";
+            
             // Switch to results tab
             var resultsTab = this.FindControl<TabItem>("ResultsTab");
             if (resultsTab?.Parent is TabControl mainTabControl)
@@ -165,6 +178,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             if (_solutionSummaryBox != null) _solutionSummaryBox.Text = "Error: " + ex.Message;
+            ClearSensitivityDropdowns();
         }
     }
 
@@ -767,84 +781,348 @@ public partial class MainWindow : Window
         }
     }
     
+    // Sensitivity Analysis functionality
+    private void PopulateSensitivityAnalysis()
+    {
+        try
+        {
+            var context = GetSensitivityContext();
+            if (context == null) 
+            {
+                ClearSensitivityDropdowns();
+                return;
+            }
+
+            var formulation = context.Formulation;
+            var basis = context.Basis;
+            
+            // Populate variable dropdowns
+            var basicVars = new List<string>();
+            var nonBasicVars = new List<string>();
+            
+            for (int i = 0; i < formulation.VarNames.Length; i++)
+            {
+                var varName = formulation.VarNames[i];
+                if (basis.Contains(i))
+                    basicVars.Add(varName);
+                else
+                    nonBasicVars.Add(varName);
+            }
+            
+            // Basic variables dropdown
+            if (_saBasicVarSelect != null)
+            {
+                _saBasicVarSelect.Items.Clear();
+                if (basicVars.Count > 0)
+                {
+                    foreach (var var in basicVars)
+                        _saBasicVarSelect.Items.Add(var);
+                    _saBasicVarSelect.SelectedIndex = 0;
+                }
+                else
+                {
+                    _saBasicVarSelect.Items.Add("No basic variables available");
+                    _saBasicVarSelect.SelectedIndex = 0;
+                }
+            }
+            
+            // Non-basic variables dropdown
+            if (_saNonBasicVarSelect != null)
+            {
+                _saNonBasicVarSelect.Items.Clear();
+                if (nonBasicVars.Count > 0)
+                {
+                    foreach (var var in nonBasicVars)
+                        _saNonBasicVarSelect.Items.Add(var);
+                    _saNonBasicVarSelect.SelectedIndex = 0;
+                }
+                else
+                {
+                    _saNonBasicVarSelect.Items.Add("No non-basic variables available");
+                    _saNonBasicVarSelect.SelectedIndex = 0;
+                }
+            }
+            
+            // Non-basic variables dropdown for column analysis
+            if (_saColumnVarSelect != null)
+            {
+                _saColumnVarSelect.Items.Clear();
+                if (nonBasicVars.Count > 0)
+                {
+                    foreach (var var in nonBasicVars)
+                        _saColumnVarSelect.Items.Add(var);
+                    _saColumnVarSelect.SelectedIndex = 0;
+                }
+                else
+                {
+                    _saColumnVarSelect.Items.Add("No non-basic variables available");
+                    _saColumnVarSelect.SelectedIndex = 0;
+                }
+            }
+            
+            // Constraints dropdown
+            if (_saRhsConstraintSelect != null)
+            {
+                _saRhsConstraintSelect.Items.Clear();
+                if (formulation.ConstraintSigns.Length > 0)
+                {
+                    for (int i = 0; i < formulation.ConstraintSigns.Length; i++)
+                        _saRhsConstraintSelect.Items.Add($"Constraint {i + 1}");
+                    _saRhsConstraintSelect.SelectedIndex = 0;
+                }
+                else
+                {
+                    _saRhsConstraintSelect.Items.Add("No constraints available");
+                    _saRhsConstraintSelect.SelectedIndex = 0;
+                }
+            }
+        }
+        catch
+        {
+            ClearSensitivityDropdowns();
+        }
+    }
+    
+    private void ClearSensitivityDropdowns()
+    {
+        _saBasicVarSelect?.Items.Clear();
+        _saNonBasicVarSelect?.Items.Clear();
+        _saColumnVarSelect?.Items.Clear();
+        _saRhsConstraintSelect?.Items.Clear();
+    }
+    
+    private RelaxedSimplexSensitivityContext? GetSensitivityContext()
+    {
+        if (_lastRunner?.Key != "primal-simplex" && _lastRunner?.Key != "revised-simplex")
+            return null;
+            
+        try
+        {
+            var formulation = ((SolverRunner)_lastRunner).BuildFormulation(GetUserInput());
+            
+            if (_lastRunner.Key == "primal-simplex")
+            {
+                var tree = new PrimalSimplex(formulation);
+                return (tree as ITree<SimplexNode>)?.SensitivityContext;
+            }
+            else
+            {
+                var tree = new RevisedDualSimplex(formulation);
+                return (tree as ITree<RevisedSimplexNode>)?.SensitivityContext;
+            }
+        }
+        catch
+        {
+            return null;
+        }
+    }
+    
     // Sensitivity Analysis event handlers
     
     // Non-Basic Variables
     private void SA_NonBasic_DisplayRange_Click(object? sender, RoutedEventArgs e)
     {
-        if (_saNonBasicStatus != null) _saNonBasicStatus.Text = "Non-basic variable range display not implemented yet.";
+        var context = GetSensitivityContext();
+        var selectedVar = _saNonBasicVarSelect?.SelectedItem?.ToString();
+        
+        if (context == null || string.IsNullOrEmpty(selectedVar))
+        {
+            if (_saNonBasicStatus != null) _saNonBasicStatus.Text = "Please select a variable and ensure a solution exists.";
+            return;
+        }
+        
+        var varIndex = Array.IndexOf(context.Formulation.VarNames, selectedVar);
+        if (varIndex >= 0)
+        {
+            var range = context.ObjectiveCoeffRange(varIndex);
+            if (_saNonBasicStatus != null)
+                _saNonBasicStatus.Text = $"Range: [{range.LowerBound:F3}, {range.UpperBound:F3}]";
+        }
     }
     
     private void SA_NonBasic_ApplyChange_Click(object? sender, RoutedEventArgs e)
     {
-        if (_saNonBasicStatus != null) _saNonBasicStatus.Text = "Non-basic variable change not implemented yet.";
+        if (_saNonBasicStatus != null) _saNonBasicStatus.Text = "Variable change simulation not implemented.";
     }
     
     // Basic Variables
     private void SA_Basic_DisplayRange_Click(object? sender, RoutedEventArgs e)
     {
-        if (_saBasicStatus != null) _saBasicStatus.Text = "Basic variable range display not implemented yet.";
+        var context = GetSensitivityContext();
+        var selectedVar = _saBasicVarSelect?.SelectedItem?.ToString();
+        
+        if (context == null || string.IsNullOrEmpty(selectedVar))
+        {
+            if (_saBasicStatus != null) _saBasicStatus.Text = "Please select a variable and ensure a solution exists.";
+            return;
+        }
+        
+        var varIndex = Array.IndexOf(context.Formulation.VarNames, selectedVar);
+        if (varIndex >= 0)
+        {
+            var range = context.ObjectiveCoeffRange(varIndex);
+            if (_saBasicStatus != null)
+                _saBasicStatus.Text = $"Range: [{range.LowerBound:F3}, {range.UpperBound:F3}]";
+        }
     }
     
     private void SA_Basic_ApplyChange_Click(object? sender, RoutedEventArgs e)
     {
-        if (_saBasicStatus != null) _saBasicStatus.Text = "Basic variable change not implemented yet.";
+        if (_saBasicStatus != null) _saBasicStatus.Text = "Variable change simulation not implemented.";
     }
     
     // Non-Basic Variable Column
     private void SA_Column_DisplayRange_Click(object? sender, RoutedEventArgs e)
     {
-        if (_saColumnStatus != null) _saColumnStatus.Text = "Variable column range display not implemented yet.";
+        var context = GetSensitivityContext();
+        var selectedVar = _saColumnVarSelect?.SelectedItem?.ToString();
+        
+        if (context == null || string.IsNullOrEmpty(selectedVar))
+        {
+            if (_saColumnStatus != null) _saColumnStatus.Text = "Please select a variable and ensure a solution exists.";
+            return;
+        }
+        
+        var varIndex = Array.IndexOf(context.Formulation.VarNames, selectedVar);
+        if (varIndex >= 0)
+        {
+            var range = context.ObjectiveCoeffRange(varIndex);
+            if (_saColumnStatus != null)
+                _saColumnStatus.Text = $"Range: [{range.LowerBound:F3}, {range.UpperBound:F3}]";
+        }
     }
     
     private void SA_Column_ApplyChange_Click(object? sender, RoutedEventArgs e)
     {
-        if (_saColumnStatus != null) _saColumnStatus.Text = "Variable column change not implemented yet.";
+        if (_saColumnStatus != null) _saColumnStatus.Text = "Variable change simulation not implemented.";
     }
     
     // RHS Analysis
     private void SA_RHS_DisplayRange_Click(object? sender, RoutedEventArgs e)
     {
-        if (_saRhsStatus != null) _saRhsStatus.Text = "RHS range display not implemented yet.";
+        var context = GetSensitivityContext();
+        var selectedIndex = _saRhsConstraintSelect?.SelectedIndex;
+        
+        if (context == null || !selectedIndex.HasValue || selectedIndex < 0)
+        {
+            if (_saRhsStatus != null) _saRhsStatus.Text = "Please select a constraint and ensure a solution exists.";
+            return;
+        }
+        
+        var range = context.RHSRange(selectedIndex.Value);
+        if (_saRhsStatus != null)
+            _saRhsStatus.Text = $"Range: [{range.LowerBound:F3}, {range.UpperBound:F3}]";
     }
     
     private void SA_RHS_ApplyChange_Click(object? sender, RoutedEventArgs e)
     {
-        if (_saRhsStatus != null) _saRhsStatus.Text = "RHS change not implemented yet.";
+        if (_saRhsStatus != null) _saRhsStatus.Text = "RHS change simulation not implemented.";
     }
     
     // Shadow Prices
     private void SA_ShadowPrices_Display_Click(object? sender, RoutedEventArgs e)
     {
-        // Display shadow prices in the grid
+        try
+        {
+            var context = GetSensitivityContext();
+            if (context == null)
+            {
+                if (_saShadowPricesStatus != null) _saShadowPricesStatus.Text = "No solution available for shadow price analysis";
+                if (_saShadowPricesOutput != null) _saShadowPricesOutput.Text = "No solution available";
+                return;
+            }
+            
+            var shadowPrices = context.ShadowPrices;
+            var items = new List<ShadowPriceItem>();
+            var output = new StringBuilder();
+            output.AppendLine("SHADOW PRICES:");
+            
+            for (int i = 0; i < shadowPrices.Length; i++)
+            {
+                var interpretation = shadowPrices[i] > 0 ? "Increasing RHS improves objective" :
+                                   shadowPrices[i] < 0 ? "Increasing RHS worsens objective" :
+                                   "RHS change has no effect";
+                
+                items.Add(new ShadowPriceItem
+                {
+                    Name = $"Constraint {i + 1}",
+                    Value = shadowPrices[i],
+                    Interpretation = interpretation
+                });
+                
+                output.AppendLine($"Constraint {i + 1}: {shadowPrices[i]:F6} - {interpretation}");
+            }
+            
+            if (_saShadowPricesGrid != null)
+                _saShadowPricesGrid.ItemsSource = items;
+            if (_saShadowPricesOutput != null)
+                _saShadowPricesOutput.Text = output.ToString();
+            if (_saShadowPricesStatus != null) _saShadowPricesStatus.Text = $"Displayed {items.Count} shadow prices";
+        }
+        catch (Exception ex)
+        {
+            if (_saShadowPricesStatus != null) _saShadowPricesStatus.Text = $"Error: {ex.Message}";
+            if (_saShadowPricesOutput != null) _saShadowPricesOutput.Text = $"Error: {ex.Message}";
+        }
     }
     
     // Add New Activity
     private void SA_NewActivity_Add_Click(object? sender, RoutedEventArgs e)
     {
-        if (_saNewActivityStatus != null) _saNewActivityStatus.Text = "Add new activity not implemented yet.";
+        if (_saNewActivityStatus != null) _saNewActivityStatus.Text = "Add new activity not implemented.";
     }
     
     // Add New Constraint
     private void SA_NewConstraint_Add_Click(object? sender, RoutedEventArgs e)
     {
-        if (_saNewConstraintStatus != null) _saNewConstraintStatus.Text = "Add new constraint not implemented yet.";
+        if (_saNewConstraintStatus != null) _saNewConstraintStatus.Text = "Add new constraint not implemented.";
     }
     
     // Duality
     private void SA_Duality_Apply_Click(object? sender, RoutedEventArgs e)
     {
-        if (_saDualityStatus != null) _saDualityStatus.Text = "Apply duality not implemented yet.";
+        var context = GetSensitivityContext();
+        if (context == null)
+        {
+            if (_saDualityStatus != null) _saDualityStatus.Text = "No solution available for duality analysis.";
+            return;
+        }
+        
+        var dualFormulation = context.GetDualFormulation().ToLPFormulation();
+        var sb = new StringBuilder();
+        sb.AppendLine("DUAL FORMULATION:");
+        sb.AppendLine($"Objective: {dualFormulation.ObjectiveType}");
+        
+        for (int i = 0; i < dualFormulation.VarNames.Length; i++)
+        {
+            sb.Append($"{dualFormulation.Objective[i]:F3}{dualFormulation.VarNames[i]}");
+            if (i < dualFormulation.VarNames.Length - 1) sb.Append(" + ");
+        }
+        sb.AppendLine();
+        sb.AppendLine("\nConstraints:");
+        
+        for (int i = 0; i < dualFormulation.ConstraintSigns.Length; i++)
+        {
+            for (int j = 0; j < dualFormulation.VarNames.Length; j++)
+            {
+                sb.Append($"{dualFormulation.ConstraintCoefficients[i, j]:F3}{dualFormulation.VarNames[j]}");
+                if (j < dualFormulation.VarNames.Length - 1) sb.Append(" + ");
+            }
+            sb.AppendLine($" {dualFormulation.ConstraintSigns[i]} {dualFormulation.RHS[i]:F3}");
+        }
+        
+        if (_saDualityDisplay != null) _saDualityDisplay.Text = sb.ToString();
+        if (_saDualityStatus != null) _saDualityStatus.Text = "Dual formulation displayed.";
     }
     
     private void SA_Duality_Solve_Click(object? sender, RoutedEventArgs e)
     {
-        if (_saDualityStatus != null) _saDualityStatus.Text = "Solve dual problem not implemented yet.";
+        if (_saDualityStatus != null) _saDualityStatus.Text = "Dual solving not implemented.";
     }
     
     private void SA_Duality_Verify_Click(object? sender, RoutedEventArgs e)
     {
-        if (_saDualityStatus != null) _saDualityStatus.Text = "Verify duality not implemented yet.";
+        if (_saDualityStatus != null) _saDualityStatus.Text = "Duality verification not implemented.";
     }
 }
 //// --- New lightweight parser for linear expressions like "3x1 - 2x2 + x3" (no LPObjective/LPConstraint) ---

@@ -193,17 +193,18 @@
 											</StackPanel>
 										</Border>
 										
-										<!-- Non-Basic Variable Column -->
+										<!-- Non-Basic Variable Column Coefficients -->
 										<Border BorderBrush="#333" BorderThickness="1" CornerRadius="5" Padding="10">
 											<StackPanel Spacing="8">
-												<TextBlock Text="Non-Basic Variable Column" FontWeight="Bold" FontSize="14"/>
+												<TextBlock Text="Non-Basic Variable Column Coefficients" FontWeight="Bold" FontSize="14"/>
+												<TextBlock Text="Analyze constraint coefficients of non-basic variables" FontSize="12" Foreground="Gray"/>
 												<Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" Margin="0,5">
 													<StackPanel Grid.Column="0" Spacing="5">
-														<TextBlock Text="Select Variable:" FontWeight="SemiBold"/>
-														<ComboBox x:Name="SA_Column_VarSelect" Width="200" PlaceholderText="Choose variable"/>
+														<TextBlock Text="Select Non-Basic Variable:" FontWeight="SemiBold"/>
+														<ComboBox x:Name="SA_Column_VarSelect" Width="200" PlaceholderText="Choose non-basic variable"/>
 														<StackPanel Orientation="Horizontal" Spacing="10" Margin="0,5">
 															<Button Content="Display Range" Width="120" Click="SA_Column_DisplayRange_Click"/>
-															<TextBox x:Name="SA_Column_NewValue" Width="100" Watermark="New value"/>
+															<TextBox x:Name="SA_Column_NewValue" Width="100" Watermark="New coefficient"/>
 															<Button Content="Apply Change" Width="120" Click="SA_Column_ApplyChange_Click"/>
 														</StackPanel>
 													</StackPanel>
@@ -245,6 +246,8 @@
 											<StackPanel Spacing="8">
 												<TextBlock Text="Shadow Prices" FontWeight="Bold" FontSize="14"/>
 												<Button Content="Display Shadow Prices" Width="200" Click="SA_ShadowPrices_Display_Click" HorizontalAlignment="Left"/>
+												<TextBlock x:Name="SA_ShadowPrices_Status" TextWrapping="Wrap" Margin="0,5,0,0"/>
+												<TextBox x:Name="SA_ShadowPrices_Output" AcceptsReturn="True" Height="100" IsReadOnly="True" Margin="0,5,0,0" FontFamily="Consolas"/>
 												<DataGrid x:Name="SA_ShadowPrices_Grid" HeadersVisibility="Column" AutoGenerateColumns="False" Height="150" x:CompileBindings="False">
 													<DataGrid.Columns>
 														<DataGridTextColumn Header="Constraint" Binding="{Binding Name}"/>
