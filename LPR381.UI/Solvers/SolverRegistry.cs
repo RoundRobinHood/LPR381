@@ -13,7 +13,8 @@ namespace LPR381.UI.Solvers
         public static IReadOnlyList<Entry> Available { get; } = new List<Entry>
         {
             new("primal-simplex",  "Primal Simplex",  () => new PrimalSimplexRunner()),
-            new("revised-simplex", "Revised Simplex", () => new RevisedSimplexRunner()),
+            new("revised-primal-simplex", "Revised Primal Simplex", () => new RevisedSimplexRunner(true)),
+            new("revised-dual-simplex", "Revised Dual Simplex", () => new RevisedSimplexRunner(false)),
             new("branch-and-bound", "Branch & Bound",  () => new BranchAndBoundRunner()),
             new("cutting-plane",   "Cutting Plane",   () => new CuttingPlaneRunner()),
             new("knapsack",        "Knapsack",        () => new KnapsackRunner())

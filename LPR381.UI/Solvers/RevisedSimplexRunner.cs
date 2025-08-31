@@ -7,9 +7,9 @@ using System;
 
 namespace LPR381.UI.Solvers
 {
-    public sealed class RevisedSimplexRunner : SolverRunner
+    public sealed class RevisedSimplexRunner(bool isPrimal) : SolverRunner
     {
-        public override string Key => "revised-simplex";
+        public override string Key => isPrimal ? "revised-primal-simplex" : "revised-dual-simplex";
         public override string Display => "Revised Simplex";
 
         protected override SolveSummary Solve(LPFormulation model)
@@ -18,7 +18,12 @@ namespace LPR381.UI.Solvers
             AddCanonicalForm(model);
             
             var canon = model.ToLPCanonical();
-            var root = new RevisedPrimalSimplex(model);
+            ITree<RevisedSimplexNode> root;
+            if(isPrimal) {
+                root = new RevisedPrimalSimplex(model);
+            } else {
+                root = new RevisedDualSimplex(model);
+            }
             var summary = new SolveSummary();
             var stack = new Stack<(ITree<RevisedSimplexNode> node, int idx)>();
             stack.Push((root, 0));
@@ -113,6 +118,48 @@ namespace LPR381.UI.Solvers
                             _iterations.Add(new IterationTableau
                             {
                                 Title = $"{title} – Price Out Info (decision: pivot from {leavingVariableName} to {enteringVariableName})",
+                                Columns = columns.ToArray(),
+                                Rows = rows.ToArray(),
+                                Values = values
+                            });
+                        } else {
+                            var rhs = (double[])priceFields[0];
+                            var leavingRow = (double[])priceFields[1];
+                            var costs = (double[])priceFields[2];
+                            var absRatios = (double[])priceFields[3];
+
+                            var columns = new List<string>();
+                            var rows = new[] { "z", $"c{leavingBasis}", "absRatio" };
+
+                            var columnValues = new List<double[]>();
+                            for(int i = 0; i < leavingRow.Length; i++) {
+                                if(leavingRow[i] >= 0) continue;
+                                
+                                columnValues.Add(new double[]{
+                                    -costs[i],
+                                    leavingRow[i],
+                                    absRatios[i]
+                                });
+
+                                columns.Add(canon.VariableNames[i]);
+                            }
+                            columnValues.Add(new double[] {
+                                node.ObjectiveValue,
+                                rhs[leavingBasis],
+                                0.0
+                            });
+                            columns.Add("rhs");
+
+                            var values = new double[rows.Length, columns.Count];
+                            for(int i = 0;i < columnValues.Count; i++) {
+                                for(int j = 0; j < rows.Length; j++) {
+                                    values[j,i] = columnValues[i][j];
+                                }
+                            }
+
+                            _iterations.Add(new IterationTableau
+                            {
+                                Title = $"{title} - Dual Price Out Info (decision: pivot from {leavingVariableName} to {enteringVariableName})",
                                 Columns = columns.ToArray(),
                                 Rows = rows.ToArray(),
                                 Values = values
