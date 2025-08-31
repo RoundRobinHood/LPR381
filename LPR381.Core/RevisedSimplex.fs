@@ -93,6 +93,40 @@ type RevisedSimplexNode=
       let c_B = this.basis |> Array.map (fun x -> this.Canon.Objective.[x]) |> Vector.Build.Dense
       c_B.DotProduct(this.bInverse * this.canon.RHS)
 
+    member this.SimplexNode =
+      let c_B = this.basis |> Array.map (fun x -> this.canon.Objective.[x]) |> Vector<double>.Build.Dense
+      let constraintMat = this.bInverse * this.canon.ConstraintMatrix
+      let rhs = this.bInverse * this.canon.RHS
+      let reduced_costs = c_B * constraintMat - this.canon.Objective
+      let objective_value = this.ObjectiveValue
+
+      let values = Matrix<double>.Build.Dense(this.canon.ConstraintMatrix.RowCount + 1, this.canon.ConstraintMatrix.ColumnCount + 1)
+      
+      let objective = values.Row 0
+      objective.SetSubVector(0, reduced_costs.Count, reduced_costs)
+      objective.[reduced_costs.Count] <- objective_value
+      values.SetRow(0, objective)
+
+      let _rhs = values.Column rhs.Count
+      _rhs.SetSubVector(1, rhs.Count, rhs)
+      values.SetColumn(rhs.Count, _rhs)
+
+      values.SetSubMatrix(1, 0, constraintMat)
+
+      let state = 
+        match this.state with
+        | Pivot (r, c, _) -> TableauState.Pivot (r+1, c)
+        | ResultState x -> TableauState.ResultState x
+
+      {
+        Tableau = {
+          columnNames = Array.append this.canon.VariableNames [| "RHS" |]
+          rowNames = Array.init rhs.Count (sprintf "c%d")
+          values = values
+        }
+        State = state
+      }
+
   interface ISimplexResultProvider with
     member this.SimplexResult = 
       match this.state with
