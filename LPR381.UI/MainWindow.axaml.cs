@@ -506,7 +506,15 @@ public partial class MainWindow : Window
                     var statusText = this.FindControl<TextBlock>("FileStatusText");
                     if (statusText != null)
                     {
-                        statusText.Text = $"Error: {error}";
+                        // Provide helpful error message for decimal format issues
+                        if (error.Contains("Use period (.) for decimals"))
+                        {
+                            statusText.Text = $"❌ {error}";
+                        }
+                        else
+                        {
+                            statusText.Text = $"❌ File parsing error: {error}";
+                        }
                         statusText.Foreground = new SolidColorBrush(Colors.Red);
                     }
                     return;
@@ -528,7 +536,23 @@ public partial class MainWindow : Window
                 var statusText = this.FindControl<TextBlock>("FileStatusText");
                 if (statusText != null)
                 {
-                    statusText.Text = $"Error: {ex.Message}";
+                    // Check for common file issues
+                    if (ex.Message.Contains("Use period (.) for decimals"))
+                    {
+                        statusText.Text = $"❌ {ex.Message}";
+                    }
+                    else if (ex is FileNotFoundException)
+                    {
+                        statusText.Text = "❌ File not found";
+                    }
+                    else if (ex is UnauthorizedAccessException)
+                    {
+                        statusText.Text = "❌ Cannot access file (check permissions)";
+                    }
+                    else
+                    {
+                        statusText.Text = $"❌ Error loading file: {ex.Message}";
+                    }
                     statusText.Foreground = new SolidColorBrush(Colors.Red);
                 }
             }
@@ -547,7 +571,7 @@ public partial class MainWindow : Window
         // Set objective function
         if (_objBox != null)
         {
-            var objTerms = formulation.VarNames.Zip(formulation.Objective, (name, coeff) => $"{coeff:+0.###;-0.###}{name}");
+            var objTerms = formulation.VarNames.Zip(formulation.Objective, (name, coeff) => $"{coeff.ToString("+0.###;-0.###", CultureInfo.InvariantCulture)}{name}");
             _objBox.Text = string.Join(" ", objTerms);
         }
         
@@ -565,7 +589,7 @@ public partial class MainWindow : Window
                 {
                     var coeff = formulation.ConstraintCoefficients[i, j];
                     if (Math.Abs(coeff) > 1e-9)
-                        terms.Add($"{coeff:+0.###;-0.###}{formulation.VarNames[j]}");
+                        terms.Add($"{coeff.ToString("+0.###;-0.###", CultureInfo.InvariantCulture)}{formulation.VarNames[j]}");
                 }
                 var sign = formulation.ConstraintSigns[i] switch
                 {
@@ -574,7 +598,7 @@ public partial class MainWindow : Window
                     _ => "="
                 };
                 
-                AddConstraintRow(string.Join(" ", terms), sign, formulation.RHS[i].ToString());
+                AddConstraintRow(string.Join(" ", terms), sign, formulation.RHS[i].ToString(CultureInfo.InvariantCulture));
             }
         }
         
