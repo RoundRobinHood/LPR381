@@ -268,18 +268,24 @@
 									<StackPanel Margin="10" Spacing="15">
 										
 										<!-- Add New Activity -->
-										<Border BorderBrush="#333" BorderThickness="1" CornerRadius="5" Padding="10">
-											<StackPanel Spacing="8">
+										<Border BorderBrush="#333" BorderThickness="1" CornerRadius="5" Padding="15">
+											<StackPanel Spacing="10">
 												<TextBlock Text="Add New Activity" FontWeight="Bold" FontSize="14"/>
-												<Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,5">
-													<StackPanel Grid.Column="0" Spacing="5">
-														<TextBlock Text="Activity Name:" FontWeight="SemiBold"/>
-														<TextBox x:Name="SA_NewActivity_Name" Width="200" Watermark="e.g., x4"/>
-														<TextBlock Text="Objective Coefficient:" FontWeight="SemiBold"/>
-														<TextBox x:Name="SA_NewActivity_ObjCoeff" Width="200" Watermark="e.g., 5"/>
-														<TextBlock Text="Constraint Coefficients:" FontWeight="SemiBold"/>
-														<TextBox x:Name="SA_NewActivity_Coeffs" Width="300" Watermark="e.g., 2 3 1 (space-separated)"/>
-														<Button Content="Add Activity" Width="150" Click="SA_NewActivity_Add_Click" Margin="0,10,0,0"/>
+												<Grid ColumnDefinitions="400,*" Margin="0,5">
+													<StackPanel Grid.Column="0" Spacing="8">
+														<StackPanel Spacing="3">
+															<TextBlock Text="Activity Name:" FontWeight="SemiBold"/>
+															<TextBox x:Name="SA_NewActivity_Name" Width="250" Watermark="e.g., x4" HorizontalAlignment="Left"/>
+														</StackPanel>
+														<StackPanel Spacing="3">
+															<TextBlock Text="Objective Coefficient:" FontWeight="SemiBold"/>
+															<TextBox x:Name="SA_NewActivity_ObjCoeff" Width="250" Watermark="e.g., 5" HorizontalAlignment="Left"/>
+														</StackPanel>
+														<StackPanel Spacing="3">
+															<TextBlock Text="Constraint Coefficients:" FontWeight="SemiBold"/>
+															<TextBox x:Name="SA_NewActivity_Coeffs" Width="350" Watermark="e.g., 2 3 1 (space-separated)" HorizontalAlignment="Left"/>
+														</StackPanel>
+														<Button Content="Add Activity" Width="150" Click="SA_NewActivity_Add_Click" Margin="0,15,0,0" HorizontalAlignment="Left"/>
 													</StackPanel>
 													<TextBlock x:Name="SA_NewActivity_Status" Grid.Column="1" Margin="20,0,0,0" TextWrapping="Wrap" VerticalAlignment="Top"/>
 												</Grid>
@@ -287,18 +293,24 @@
 										</Border>
 										
 										<!-- Add New Constraint -->
-										<Border BorderBrush="#333" BorderThickness="1" CornerRadius="5" Padding="10">
-											<StackPanel Spacing="8">
+										<Border BorderBrush="#333" BorderThickness="1" CornerRadius="5" Padding="15">
+											<StackPanel Spacing="10">
 												<TextBlock Text="Add New Constraint" FontWeight="Bold" FontSize="14"/>
-												<Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,5">
-													<StackPanel Grid.Column="0" Spacing="5">
-														<TextBlock Text="Constraint Name:" FontWeight="SemiBold"/>
-														<TextBox x:Name="SA_NewConstraint_Name" Width="200" Watermark="e.g., C4"/>
-														<TextBlock Text="Coefficients:" FontWeight="SemiBold"/>
-														<TextBox x:Name="SA_NewConstraint_Coeffs" Width="300" Watermark="e.g., 1 2 3 (space-separated)"/>
-														<TextBlock Text="RHS Value:" FontWeight="SemiBold"/>
-														<TextBox x:Name="SA_NewConstraint_RHS" Width="200" Watermark="e.g., 10"/>
-														<Button Content="Add Constraint" Width="150" Click="SA_NewConstraint_Add_Click" Margin="0,10,0,0"/>
+												<Grid ColumnDefinitions="400,*" Margin="0,5">
+													<StackPanel Grid.Column="0" Spacing="8">
+														<StackPanel Spacing="3">
+															<TextBlock Text="Constraint Name:" FontWeight="SemiBold"/>
+															<TextBox x:Name="SA_NewConstraint_Name" Width="250" Watermark="e.g., C4" HorizontalAlignment="Left"/>
+														</StackPanel>
+														<StackPanel Spacing="3">
+															<TextBlock Text="Coefficients:" FontWeight="SemiBold"/>
+															<TextBox x:Name="SA_NewConstraint_Coeffs" Width="350" Watermark="e.g., 1 2 3 (space-separated)" HorizontalAlignment="Left"/>
+														</StackPanel>
+														<StackPanel Spacing="3">
+															<TextBlock Text="RHS Value:" FontWeight="SemiBold"/>
+															<TextBox x:Name="SA_NewConstraint_RHS" Width="250" Watermark="e.g., 10" HorizontalAlignment="Left"/>
+														</StackPanel>
+														<Button Content="Add Constraint" Width="150" Click="SA_NewConstraint_Add_Click" Margin="0,15,0,0" HorizontalAlignment="Left"/>
 													</StackPanel>
 													<TextBlock x:Name="SA_NewConstraint_Status" Grid.Column="1" Margin="20,0,0,0" TextWrapping="Wrap" VerticalAlignment="Top"/>
 												</Grid>

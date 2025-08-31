@@ -1069,13 +1069,175 @@ public partial class MainWindow : Window
     // Add New Activity
     private void SA_NewActivity_Add_Click(object? sender, RoutedEventArgs e)
     {
-        if (_saNewActivityStatus != null) _saNewActivityStatus.Text = "Add new activity not implemented.";
+        try
+        {
+            var context = GetSensitivityContext();
+            if (context == null)
+            {
+                if (_saNewActivityStatus != null) _saNewActivityStatus.Text = "No solution available for adding activity.";
+                return;
+            }
+            
+            var activityName = _saNewActivityName?.Text?.Trim();
+            var objCoeffText = _saNewActivityObjCoeff?.Text?.Trim();
+            var coeffsText = _saNewActivityCoeffs?.Text?.Trim();
+            
+            if (string.IsNullOrEmpty(activityName) || string.IsNullOrEmpty(objCoeffText) || string.IsNullOrEmpty(coeffsText))
+            {
+                if (_saNewActivityStatus != null) _saNewActivityStatus.Text = "Please fill in all fields.";
+                return;
+            }
+            
+            if (!double.TryParse(objCoeffText, out var objCoeff))
+            {
+                if (_saNewActivityStatus != null) _saNewActivityStatus.Text = "Invalid objective coefficient.";
+                return;
+            }
+            
+            var coeffs = coeffsText.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => double.TryParse(s, out var val) ? val : double.NaN)
+                .ToArray();
+                
+            if (coeffs.Any(double.IsNaN))
+            {
+                if (_saNewActivityStatus != null) _saNewActivityStatus.Text = "Invalid constraint coefficients.";
+                return;
+            }
+            
+            if (coeffs.Length != context.Formulation.ConstraintSigns.Length)
+            {
+                if (_saNewActivityStatus != null) _saNewActivityStatus.Text = $"Expected {context.Formulation.ConstraintSigns.Length} coefficients, got {coeffs.Length}.";
+                return;
+            }
+            
+            // Create new formulation with added activity
+            var newFormulation = context.Formulation.WithActivity(activityName, objCoeff, coeffs, SignRestriction.Positive);
+            
+            // Create RevisedDualSimplex from sensitivity context with new formulation
+            var newTree = new RevisedDualSimplex(newFormulation);
+            var result = Explorer.SolveSimplex(newTree);
+            
+            var sb = new StringBuilder();
+            sb.AppendLine($"NEW ACTIVITY '{activityName}' ADDED:");
+            sb.AppendLine($"Objective coefficient: {objCoeff}");
+            sb.AppendLine($"Constraint coefficients: [{string.Join(", ", coeffs)}]");
+            sb.AppendLine();
+            sb.AppendLine("NEW SOLUTION:");
+            
+            var (resultCase, resultFields) = FSharpInterop.ReadUnion(result);
+            
+            if (resultCase == "Optimal")
+            {
+                var objValue = (double)resultFields[2];
+                var varValues = (Dictionary<string, double>)resultFields[1];
+                
+                sb.AppendLine($"Objective Value: {objValue:F6}");
+                sb.AppendLine("Variable Values:");
+                foreach (var kv in varValues)
+                {
+                    sb.AppendLine($"{kv.Key} = {kv.Value:F6}");
+                }
+            }
+            else
+            {
+                sb.AppendLine($"Result: {resultCase}");
+            }
+            
+            if (_saNewActivityStatus != null) _saNewActivityStatus.Text = sb.ToString();
+        }
+        catch (Exception ex)
+        {
+            if (_saNewActivityStatus != null) _saNewActivityStatus.Text = $"Error: {ex.Message}";
+        }
     }
     
     // Add New Constraint
     private void SA_NewConstraint_Add_Click(object? sender, RoutedEventArgs e)
     {
-        if (_saNewConstraintStatus != null) _saNewConstraintStatus.Text = "Add new constraint not implemented.";
+        try
+        {
+            var context = GetSensitivityContext();
+            if (context == null)
+            {
+                if (_saNewConstraintStatus != null) _saNewConstraintStatus.Text = "No solution available for adding constraint.";
+                return;
+            }
+            
+            var constraintName = _saNewConstraintName?.Text?.Trim();
+            var coeffsText = _saNewConstraintCoeffs?.Text?.Trim();
+            var rhsText = _saNewConstraintRhs?.Text?.Trim();
+            
+            if (string.IsNullOrEmpty(constraintName) || string.IsNullOrEmpty(coeffsText) || string.IsNullOrEmpty(rhsText))
+            {
+                if (_saNewConstraintStatus != null) _saNewConstraintStatus.Text = "Please fill in all fields.";
+                return;
+            }
+            
+            if (!double.TryParse(rhsText, out var rhs))
+            {
+                if (_saNewConstraintStatus != null) _saNewConstraintStatus.Text = "Invalid RHS value.";
+                return;
+            }
+            
+            var coeffs = coeffsText.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => double.TryParse(s, out var val) ? val : double.NaN)
+                .ToArray();
+                
+            if (coeffs.Any(double.IsNaN))
+            {
+                if (_saNewConstraintStatus != null) _saNewConstraintStatus.Text = "Invalid constraint coefficients.";
+                return;
+            }
+            
+            if (coeffs.Length != context.Formulation.VarNames.Length)
+            {
+                if (_saNewConstraintStatus != null) _saNewConstraintStatus.Text = $"Expected {context.Formulation.VarNames.Length} coefficients, got {coeffs.Length}.";
+                return;
+            }
+            
+            // Create constraint terms
+            var constraintTerms = context.Formulation.VarNames.Zip(coeffs, (name, coeff) => Tuple.Create(coeff, name)).ToArray();
+            var constraint = new LPConstraint(constraintTerms, ConstraintSign.LessOrEqual, rhs);
+            
+            // Create new formulation with added constraint
+            var newFormulation = context.Formulation.WithConstraint(constraint);
+            
+            // Create RevisedDualSimplex from sensitivity context with new formulation
+            var newTree = new RevisedDualSimplex(newFormulation);
+            var result = Explorer.SolveSimplex(newTree);
+            
+            var sb = new StringBuilder();
+            sb.AppendLine($"NEW CONSTRAINT '{constraintName}' ADDED:");
+            sb.AppendLine($"Coefficients: [{string.Join(", ", coeffs)}]");
+            sb.AppendLine($"RHS: {rhs}");
+            sb.AppendLine();
+            sb.AppendLine("NEW SOLUTION:");
+            
+            var (resultCase, resultFields) = FSharpInterop.ReadUnion(result);
+            
+            if (resultCase == "Optimal")
+            {
+                var objValue = (double)resultFields[2];
+                var varValues = (Dictionary<string, double>)resultFields[1];
+                
+                sb.AppendLine($"Objective Value: {objValue:F6}");
+                sb.AppendLine("Variable Values:");
+                foreach (var kv in varValues)
+                {
+                    sb.AppendLine($"{kv.Key} = {kv.Value:F6}");
+                }
+            }
+            else
+            {
+                sb.AppendLine($"Result: {resultCase}");
+            }
+            
+            if (_saNewConstraintStatus != null) _saNewConstraintStatus.Text = sb.ToString();
+        }
+        catch (Exception ex)
+        {
+            if (_saNewConstraintStatus != null) _saNewConstraintStatus.Text = $"Error: {ex.Message}";
+        }
     }
     
     // Duality
